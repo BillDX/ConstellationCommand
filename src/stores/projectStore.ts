@@ -4,17 +4,20 @@ import type { Project } from '../types';
 interface ProjectState {
   projects: Record<string, Project>;
   activeProjectId: string | null;
+  baseDir: string;
 
   // Actions
   addProject: (project: Project) => void;
   updateProject: (id: string, updates: Partial<Project>) => void;
   removeProject: (id: string) => void;
   setActiveProject: (id: string | null) => void;
+  setBaseDir: (dir: string) => void;
 }
 
 export const useProjectStore = create<ProjectState>((set) => ({
   projects: {},
   activeProjectId: null,
+  baseDir: '',
 
   addProject: (project) =>
     set((state) => ({
@@ -44,4 +47,7 @@ export const useProjectStore = create<ProjectState>((set) => ({
 
   setActiveProject: (id) =>
     set({ activeProjectId: id }),
+
+  setBaseDir: (dir) =>
+    set({ baseDir: dir }),
 }));

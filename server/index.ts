@@ -14,6 +14,13 @@ import type {
   ServerMessage,
   StateSyncMessage,
 } from './types.js';
+import {
+  getBaseDirectory,
+  ensureBaseDirectory,
+  createProjectDirectory,
+  validateProjectPath,
+  validateAgentCwd,
+} from './pathSecurity.js';
 
 // ── Config ───────────────────────────────────────────────────────────────
 
@@ -69,7 +76,7 @@ function broadcast(msg: ServerMessage): void {
 function buildStateSync(): StateSyncMessage {
   return {
     type: 'state:sync',
-    payload: { projects, agents },
+    payload: { projects, agents, baseDir: getBaseDirectory() },
   };
 }
 
@@ -219,10 +226,29 @@ function handleEventsConnection(ws: WebSocket): void {
 
 // ── Client message dispatcher ────────────────────────────────────────────
 
-function handleClientMessage(msg: ClientMessage): void {
+async function handleClientMessage(msg: ClientMessage): Promise<void> {
   switch (msg.type) {
     case 'agent:launch': {
       const { id, projectId, task, cwd } = msg.payload;
+
+      const projectCwd = projects[projectId]?.cwd;
+      if (!projectCwd) {
+        broadcast({
+          type: 'validation:error',
+          payload: { message: `Project "${projectId}" not found`, context: 'agent:launch' },
+        });
+        break;
+      }
+
+      // Validate agent CWD is within the project directory
+      const validation = await validateAgentCwd(cwd, projectCwd);
+      if (!validation.valid) {
+        broadcast({
+          type: 'validation:error',
+          payload: { message: validation.reason!, context: 'agent:launch' },
+        });
+        break;
+      }
 
       // Register agent in state
       agents[id] = {
@@ -235,9 +261,7 @@ function handleClientMessage(msg: ClientMessage): void {
       };
 
       // Add agent to project
-      if (projects[projectId]) {
-        projects[projectId].agents.push(id);
-      }
+      projects[projectId].agents.push(id);
 
       sessionManager.launchAgent({ id, projectId, task, cwd });
       break;
@@ -264,6 +288,15 @@ function handleClientMessage(msg: ClientMessage): void {
     case 'project:watch': {
       const { projectId, cwd } = msg.payload;
 
+      const watchValidation = await validateProjectPath(cwd);
+      if (!watchValidation.valid) {
+        broadcast({
+          type: 'validation:error',
+          payload: { message: watchValidation.reason!, context: 'project:watch' },
+        });
+        break;
+      }
+
       // Register project if not present
       if (!projects[projectId]) {
         projects[projectId] = {
@@ -288,6 +321,16 @@ function handleClientMessage(msg: ClientMessage): void {
 
     case 'git:startMonitor': {
       const { projectId, cwd } = msg.payload;
+
+      const gitValidation = await validateProjectPath(cwd);
+      if (!gitValidation.valid) {
+        broadcast({
+          type: 'validation:error',
+          payload: { message: gitValidation.reason!, context: 'git:startMonitor' },
+        });
+        break;
+      }
+
       gitMonitor.startMonitoring(projectId, cwd);
       break;
     }
@@ -299,19 +342,21 @@ function handleClientMessage(msg: ClientMessage): void {
     }
 
     case 'project:create': {
-      const { id, name, description, cwd } = msg.payload;
+      const { id, name, description } = msg.payload;
+
+      // Server generates project directory — no user-provided path
+      const projectCwd = await createProjectDirectory(name);
+
       projects[id] = {
         id,
         name,
         description,
-        cwd: cwd || process.cwd(),
+        cwd: projectCwd,
         status: 'active',
         agents: [],
       };
-      // Start file watcher if cwd provided
-      if (cwd) {
-        fileWatcher.watch(id, cwd);
-      }
+      // Start file watcher on the created directory
+      fileWatcher.watch(id, projectCwd);
       // Broadcast updated state
       broadcast(buildStateSync());
       break;
@@ -326,6 +371,11 @@ function handleClientMessage(msg: ClientMessage): void {
 
 // ── Start server ─────────────────────────────────────────────────────────
 
-httpServer.listen(PORT, '0.0.0.0', () => {
-  console.log(`ConstellationCommand server listening on 0.0.0.0:${PORT}`);
-});
+(async () => {
+  await ensureBaseDirectory();
+  console.log(`Base project directory: ${getBaseDirectory()}`);
+
+  httpServer.listen(PORT, '0.0.0.0', () => {
+    console.log(`ConstellationCommand server listening on 0.0.0.0:${PORT}`);
+  });
+})();

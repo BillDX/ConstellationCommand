@@ -87,7 +87,6 @@ export interface ProjectCreateMessage {
     id: string;
     name: string;
     description: string;
-    cwd: string;
   };
 }
 
@@ -114,6 +113,7 @@ export interface StateSyncMessage {
   payload: {
     projects: Record<string, Project>;
     agents: Record<string, Agent>;
+    baseDir: string;
   };
 }
 
@@ -177,6 +177,14 @@ export interface GitFileChange {
   path: string;
 }
 
+export interface ValidationErrorMessage {
+  type: 'validation:error';
+  payload: {
+    message: string;
+    context: string;
+  };
+}
+
 export type ServerMessage =
   | StateSyncMessage
   | AgentStatusMessage
@@ -184,4 +192,5 @@ export type ServerMessage =
   | BuildEventMessage
   | TaskCompletedMessage
   | FsChangeMessage
-  | GitStatusMessage;
+  | GitStatusMessage
+  | ValidationErrorMessage;

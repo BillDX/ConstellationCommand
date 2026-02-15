@@ -3,6 +3,7 @@ import type { WSClientMessage, WSServerMessage } from '../types';
 import { useAgentStore } from '../stores/agentStore';
 import { useProjectStore } from '../stores/projectStore';
 import { useLogStore } from '../stores/logStore';
+import { useFlowStore } from '../stores/flowStore';
 
 type ConnectionStatus = 'connecting' | 'connected' | 'disconnected';
 type TerminalOutputCallback = (agentId: string, data: string) => void;
@@ -24,8 +25,9 @@ export function useWebSocket() {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
 
   const { addAgent, updateAgent, addEvent } = useAgentStore.getState();
-  const { addProject, updateProject } = useProjectStore.getState();
+  const { addProject, updateProject, setBaseDir } = useProjectStore.getState();
   const { addLog } = useLogStore.getState();
+  const { addToast } = useFlowStore.getState();
 
   const sendMessage = useCallback((message: WSClientMessage) => {
     const ws = wsRef.current;
@@ -46,7 +48,7 @@ export function useWebSocket() {
           wrapped = { type: 'terminal:resize', payload: { agentId: message.agentId, cols: message.cols, rows: message.rows } };
           break;
         case 'project:create':
-          wrapped = { type: 'project:create', payload: { id: crypto.randomUUID(), name: message.name, description: message.description, cwd: message.cwd } };
+          wrapped = { type: 'project:create', payload: { id: crypto.randomUUID(), name: message.name, description: message.description } };
           break;
         case 'state:request':
           wrapped = message; // No payload needed
@@ -143,6 +145,11 @@ export function useWebSocket() {
         const agentStore = useAgentStore.getState();
         const projectStore = useProjectStore.getState();
 
+        // Store base directory from server
+        if (data.baseDir) {
+          projectStore.setBaseDir(data.baseDir);
+        }
+
         const serverProjects = data.projects || {};
         for (const proj of Object.values(serverProjects)) {
           const p = proj as any;
@@ -181,8 +188,18 @@ export function useWebSocket() {
         addLog(data.entry);
         break;
       }
+
+      case 'validation:error': {
+        addToast({
+          type: 'error',
+          title: 'VALIDATION ERROR',
+          message: data.message,
+          duration: 6000,
+        });
+        break;
+      }
     }
-  }, [addEvent, updateAgent, addLog]);
+  }, [addEvent, updateAgent, addLog, addToast]);
 
   const connect = useCallback(() => {
     // Clean up any existing connection

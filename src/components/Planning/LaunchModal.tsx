@@ -32,7 +32,6 @@ export default function LaunchModal({ onClose, sendMessage }: LaunchModalProps) 
   const activeProject = activeProjectId ? projects[activeProjectId] : null;
 
   const [task, setTask] = useState('');
-  const [cwd, setCwd] = useState(activeProject?.cwd ?? '');
   const [isClosing, setIsClosing] = useState(false);
   const [hoveredButton, setHoveredButton] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -70,18 +69,16 @@ export default function LaunchModal({ onClose, sendMessage }: LaunchModalProps) 
     if (!trimmedTask) return;
 
     const projectId = activeProject?.id ?? 'default';
-    const workingDir = cwd.trim() || activeProject?.cwd || '/home';
-    const agentId = generateId();
 
     sendMessage({
       type: 'agent:launch',
       projectId,
       task: trimmedTask,
-      cwd: workingDir,
+      cwd: activeProject?.cwd || '',
     });
 
     handleClose();
-  }, [task, cwd, activeProject, sendMessage, handleClose]);
+  }, [task, activeProject, sendMessage, handleClose]);
 
   /* ---------- Keyboard shortcut: Ctrl/Cmd + Enter to launch ---------- */
   const handleKeyDown = useCallback(
@@ -178,24 +175,15 @@ export default function LaunchModal({ onClose, sendMessage }: LaunchModalProps) 
             />
           </div>
 
-          {/* Working Directory Field */}
+          {/* Working Directory (read-only) */}
           <div style={styles.fieldGroup}>
             <label style={styles.fieldLabel}>
               <span style={styles.fieldLabelIcon}>{'\u25B8'}</span>
               WORKING DIRECTORY
             </label>
-            <input
-              type="text"
-              value={cwd}
-              onChange={(e) => setCwd(e.target.value)}
-              placeholder={activeProject?.cwd ?? '/home/user/project'}
-              style={styles.textInput}
-              spellCheck={false}
-              autoComplete="off"
-            />
-            <span style={styles.fieldHint}>
-              Default: {activeProject?.cwd ?? 'No project selected'}
-            </span>
+            <div style={styles.pathDisplay}>
+              {activeProject?.cwd || 'No project selected'}
+            </div>
           </div>
 
           {/* Project Context */}
@@ -491,31 +479,19 @@ const styles: Record<string, React.CSSProperties> = {
     boxSizing: 'border-box' as const,
   },
 
-  textInput: {
+  pathDisplay: {
     width: '100%',
-    height: 38,
-    padding: '0 14px',
-    background: 'var(--space-void, #0a0e17)',
-    border: '1px solid rgba(0, 200, 255, 0.25)',
+    padding: '8px 14px',
+    background: 'rgba(0, 200, 255, 0.03)',
+    border: '1px solid rgba(0, 200, 255, 0.15)',
     borderRadius: 2,
-    color: 'var(--text-primary, #e0f0ff)',
+    color: 'var(--cyan-glow, #00c8ff)',
     fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
-    fontSize: '12px',
+    fontSize: '11px',
     fontWeight: 400,
-    letterSpacing: '0.5px',
-    outline: 'none',
-    transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
-    boxShadow: 'inset 0 0 15px rgba(0, 0, 0, 0.5)',
-    boxSizing: 'border-box' as const,
-  },
-
-  fieldHint: {
-    fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
-    fontSize: '10px',
-    fontWeight: 400,
-    color: 'var(--text-secondary, #7a8ba8)',
-    opacity: 0.5,
     letterSpacing: '0.3px',
+    opacity: 0.8,
+    boxSizing: 'border-box' as const,
   },
 
   /* --- Context Row --- */

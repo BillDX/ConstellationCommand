@@ -30,11 +30,17 @@ async function dismissWelcome(page: import('@playwright/test').Page) {
 // Helper: dismiss welcome overlay and create a project so we're in active phase
 async function setupProject(page: import('@playwright/test').Page, name = 'Test Project') {
   await page.goto('/');
-  // Dismiss welcome to navigate to incubator
+  // Try to dismiss welcome overlay if visible; if server already has projects
+  // from a previous test the welcome overlay won't appear
   const beginBtn = page.getByText('BEGIN NEW MISSION');
-  await beginBtn.waitFor({ state: 'visible', timeout: 5000 });
-  await beginBtn.click();
-  await page.waitForTimeout(800);
+  try {
+    await beginBtn.waitFor({ state: 'visible', timeout: 5000 });
+    await beginBtn.click();
+    await page.waitForTimeout(800);
+  } catch {
+    // Welcome overlay not present — navigate to incubator manually
+    await navigateTo(page, 'Project Incubator');
+  }
 
   // CreateProjectModal should auto-open after navigating to incubator
   const nameInput = page.getByPlaceholder('Enter project designation...');
@@ -44,7 +50,6 @@ async function setupProject(page: import('@playwright/test').Page, name = 'Test 
   }
   await nameInput.waitFor({ state: 'visible', timeout: 2000 });
   await nameInput.fill(name);
-  await page.getByPlaceholder('/home/user/project').fill('/tmp/test');
   const createBtn = page.locator('button').filter({ hasText: /CREATE/ }).last();
   await createBtn.click();
   await page.waitForTimeout(800);
@@ -202,11 +207,11 @@ test.describe('Incubator View (Galaxy Map)', () => {
     await expect(page.getByText('PROJECT NAME')).toBeVisible();
   });
 
-  test('CreateProjectModal has name, description, cwd fields', async ({ page }) => {
+  test('CreateProjectModal has name, description, and directory preview', async ({ page }) => {
     await page.getByRole('button', { name: /NEW PROJECT/ }).click();
     await expect(page.getByPlaceholder('Enter project designation...')).toBeVisible();
     await expect(page.getByPlaceholder('Describe the mission parameters for this project...')).toBeVisible();
-    await expect(page.getByPlaceholder('/home/user/project')).toBeVisible();
+    await expect(page.getByText('.constellation-command/projects/')).toBeVisible();
   });
 
   test('Cancel closes CreateProjectModal', async ({ page }) => {
@@ -231,7 +236,6 @@ test.describe('Project Creation Flow', () => {
     // Create project
     await page.getByRole('button', { name: /NEW PROJECT/ }).click();
     await page.getByPlaceholder('Enter project designation...').fill('Test Project');
-    await page.getByPlaceholder('/home/user/project').fill('/tmp/test');
     const createBtn = page.locator('button').filter({ hasText: /CREATE/ }).last();
     await createBtn.click();
     await page.waitForTimeout(500);
@@ -341,7 +345,7 @@ test.describe('Launch Modal', () => {
     await expect(page.getByText('TASK DIRECTIVE')).toBeVisible();
   });
 
-  test('has task textarea and cwd input', async ({ page }) => {
+  test('has task textarea and working directory display', async ({ page }) => {
     await page.getByText('LAUNCH AGENT', { exact: true }).click();
     await expect(page.getByPlaceholder('Describe the mission objective for this agent...')).toBeVisible();
     await expect(page.getByText('WORKING DIRECTORY')).toBeVisible();
@@ -380,10 +384,11 @@ test.describe('Toast System', () => {
   test('toasts appear and can be dismissed', async ({ page }) => {
     await page.goto('/');
     await dismissWelcome(page);
+    // Navigate to incubator to create project
+    await navigateTo(page, 'Project Incubator');
     // Create project to trigger toast
     await page.getByRole('button', { name: /NEW PROJECT/ }).click();
     await page.getByPlaceholder('Enter project designation...').fill('Toast Test');
-    await page.getByPlaceholder('/home/user/project').fill('/tmp/test');
     const createBtn = page.locator('button').filter({ hasText: /CREATE/ }).last();
     await createBtn.click();
     await page.waitForTimeout(500);

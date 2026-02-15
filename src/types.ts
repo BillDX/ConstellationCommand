@@ -48,14 +48,14 @@ export type WSClientMessage =
   | { type: 'terminal:resize'; agentId: string; cols: number; rows: number }
   | { type: 'agent:launch'; id: string; projectId: string; task: string; cwd: string }
   | { type: 'agent:kill'; agentId: string }
-  | { type: 'project:create'; name: string; description: string; cwd: string }
+  | { type: 'project:create'; name: string; description: string }
   | { type: 'state:request' };
 
 // Server messages (unwrapped from payload wrapper in useWebSocket)
 export type WSServerMessage =
   | { type: 'terminal:output'; agentId: string; data: string }
   | { type: 'agent:status'; agentId: string; status: string; timestamp: number }
-  | { type: 'state:sync'; projects: Record<string, any>; agents: Record<string, any> }
+  | { type: 'state:sync'; projects: Record<string, any>; agents: Record<string, any>; baseDir: string }
   | { type: 'fs:change'; projectId: string; event: string; path: string; timestamp: number }
   | { type: 'file:created'; agentId: string; path: string; timestamp: number }
   | { type: 'file:edited'; agentId: string; path: string; timestamp: number }
@@ -64,4 +64,5 @@ export type WSServerMessage =
   | { type: 'build:error'; agentId: string; message?: string; timestamp: number }
   | { type: 'task:completed'; agentId: string; timestamp: number }
   | { type: 'git:status'; projectId: string; changes: any[]; diffStat: string; timestamp: number }
+  | { type: 'validation:error'; message: string; context: string }
   | { type: 'log'; entry: LogEntry };

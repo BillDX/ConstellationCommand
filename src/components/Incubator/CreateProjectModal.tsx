@@ -24,12 +24,20 @@ export default function CreateProjectModal({ onClose, sendMessage }: CreateProje
   const { addProject, setActiveProject } = useProjectStore();
   const { addToast } = useFlowStore();
   const { setView } = useUIStore();
+  const baseDir = useProjectStore((s) => s.baseDir);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [cwd, setCwd] = useState('');
   const [isClosing, setIsClosing] = useState(false);
   const [hoveredButton, setHoveredButton] = useState<string | null>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
+
+  /* ---------- Derive slug for preview ---------- */
+  const slug = name.trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    || 'project';
 
   /* ---------- Focus name input on mount ---------- */
   useEffect(() => {
@@ -64,14 +72,13 @@ export default function CreateProjectModal({ onClose, sendMessage }: CreateProje
     if (!trimmedName) return;
 
     const projectId = crypto.randomUUID();
-    const trimmedCwd = cwd.trim();
 
-    // Add project to local store immediately
+    // Add project to local store immediately (cwd will be populated by state:sync from server)
     addProject({
       id: projectId,
       name: trimmedName,
       description: description.trim(),
-      cwd: trimmedCwd,
+      cwd: '',
       status: 'active',
       health: 'healthy',
       progress: 0,
@@ -80,12 +87,11 @@ export default function CreateProjectModal({ onClose, sendMessage }: CreateProje
     });
     setActiveProject(projectId);
 
-    // Send to server
+    // Send to server (server generates the project directory)
     sendMessage({
       type: 'project:create',
       name: trimmedName,
       description: description.trim(),
-      cwd: trimmedCwd,
     });
 
     // Toast notification
@@ -101,7 +107,7 @@ export default function CreateProjectModal({ onClose, sendMessage }: CreateProje
 
     // Navigate to planning after modal closes
     setTimeout(() => setView('planning'), 300);
-  }, [name, description, cwd, sendMessage, handleClose, addProject, setActiveProject, addToast, setView]);
+  }, [name, description, sendMessage, handleClose, addProject, setActiveProject, addToast, setView]);
 
   /* ---------- Keyboard shortcut: Ctrl/Cmd + Enter to create ---------- */
   const handleKeyDown = useCallback(
@@ -215,23 +221,17 @@ export default function CreateProjectModal({ onClose, sendMessage }: CreateProje
             />
           </div>
 
-          {/* Working Directory Field */}
+          {/* Project Directory Preview (read-only) */}
           <div style={styles.fieldGroup}>
             <label style={styles.fieldLabel}>
               <span style={styles.fieldLabelIcon}>{'\u25B8'}</span>
-              WORKING DIRECTORY
+              PROJECT DIRECTORY
             </label>
-            <input
-              type="text"
-              value={cwd}
-              onChange={(e) => setCwd(e.target.value)}
-              placeholder="/home/user/project"
-              style={styles.textInputMono}
-              spellCheck={false}
-              autoComplete="off"
-            />
+            <div style={styles.pathPreview}>
+              {baseDir ? `${baseDir}/${slug}/` : `~/.constellation-command/projects/${slug}/`}
+            </div>
             <span style={styles.fieldHint}>
-              Filesystem path for project operations
+              Auto-generated secure project directory
             </span>
           </div>
         </div>
@@ -515,21 +515,18 @@ const styles: Record<string, React.CSSProperties> = {
     boxSizing: 'border-box' as const,
   },
 
-  textInputMono: {
+  pathPreview: {
     width: '100%',
-    height: 38,
-    padding: '0 14px',
-    background: 'var(--space-void, #0a0e17)',
-    border: '1px solid rgba(0, 200, 255, 0.25)',
+    padding: '8px 14px',
+    background: 'rgba(0, 200, 255, 0.03)',
+    border: '1px solid rgba(0, 200, 255, 0.15)',
     borderRadius: 2,
-    color: 'var(--text-primary, #e0f0ff)',
+    color: 'var(--cyan-glow, #00c8ff)',
     fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
-    fontSize: '12px',
+    fontSize: '11px',
     fontWeight: 400,
-    letterSpacing: '0.5px',
-    outline: 'none',
-    transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
-    boxShadow: 'inset 0 0 15px rgba(0, 0, 0, 0.5)',
+    letterSpacing: '0.3px',
+    opacity: 0.8,
     boxSizing: 'border-box' as const,
   },
 
