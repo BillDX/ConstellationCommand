@@ -297,6 +297,30 @@ function handleClientMessage(msg: ClientMessage): void {
       gitMonitor.stopMonitoring(projectId);
       break;
     }
+
+    case 'project:create': {
+      const { id, name, description, cwd } = msg.payload;
+      projects[id] = {
+        id,
+        name,
+        description,
+        cwd: cwd || process.cwd(),
+        status: 'active',
+        agents: [],
+      };
+      // Start file watcher if cwd provided
+      if (cwd) {
+        fileWatcher.watch(id, cwd);
+      }
+      // Broadcast updated state
+      broadcast(buildStateSync());
+      break;
+    }
+
+    case 'state:request': {
+      broadcast(buildStateSync());
+      break;
+    }
   }
 }
 

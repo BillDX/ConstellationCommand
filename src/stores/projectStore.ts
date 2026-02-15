@@ -12,21 +12,9 @@ interface ProjectState {
   setActiveProject: (id: string | null) => void;
 }
 
-const demoProject: Project = {
-  id: 'demo',
-  name: 'USS Enterprise',
-  description: 'Main development project',
-  cwd: '/home/bill/projects',
-  status: 'active',
-  health: 'healthy',
-  progress: 42,
-  agents: [],
-  createdAt: Date.now(),
-};
-
 export const useProjectStore = create<ProjectState>((set) => ({
-  projects: { [demoProject.id]: demoProject },
-  activeProjectId: demoProject.id,
+  projects: {},
+  activeProjectId: null,
 
   addProject: (project) =>
     set((state) => ({

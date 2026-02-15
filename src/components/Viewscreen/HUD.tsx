@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import type { FlowPhase } from '../../stores/flowStore';
 
 /* ============================================================
    HUD (Heads-Up Display) — Bridge Command Overlay
@@ -19,6 +20,8 @@ export interface HUDSidebarProps {
   onNavigate: (view: string) => void;
   collapsed: boolean;
   onToggle: () => void;
+  suggestedView?: string;
+  badgeCounts?: Record<string, number>;
 }
 
 export interface HUDBottomBarProps {
@@ -27,6 +30,7 @@ export interface HUDBottomBarProps {
   onHail: () => void;
   onScan: () => void;
   redAlertActive?: boolean;
+  phase?: FlowPhase;
 }
 
 export interface HUDProps extends HUDSidebarProps, HUDBottomBarProps {
@@ -109,7 +113,7 @@ function TopBar({ title, subtitle }: HUDTopBarProps) {
    Left Sidebar Component
    ========================================================== */
 
-function Sidebar({ activeView, onNavigate, collapsed, onToggle }: HUDSidebarProps) {
+function Sidebar({ activeView, onNavigate, collapsed, onToggle, suggestedView, badgeCounts }: HUDSidebarProps) {
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
 
   return (
@@ -142,6 +146,8 @@ function Sidebar({ activeView, onNavigate, collapsed, onToggle }: HUDSidebarProp
         {NAV_ITEMS.map((item) => {
           const isActive = activeView === item.id;
           const isHovered = hoveredItem === item.id;
+          const isSuggested = suggestedView === item.id && !isActive;
+          const badgeCount = badgeCounts?.[item.id];
           return (
             <button
               key={item.id}
@@ -175,6 +181,12 @@ function Sidebar({ activeView, onNavigate, collapsed, onToggle }: HUDSidebarProp
               {!collapsed && (
                 <span style={styles.navLabel}>{item.label}</span>
               )}
+              {isSuggested && (
+                <span style={styles.suggestedDot} />
+              )}
+              {!collapsed && badgeCount != null && badgeCount > 0 && (
+                <span style={styles.badgeCount}>{badgeCount}</span>
+              )}
             </button>
           );
         })}
@@ -196,19 +208,30 @@ interface ActionButton {
   pulsing?: boolean;
 }
 
+/* ---------- Phase-based button visibility ---------- */
+const PHASE_BUTTONS: Record<string, string[]> = {
+  'welcome': ['launch', 'scan'],
+  'project-created': ['launch', 'scan'],
+  'planning': ['launch', 'scan'],
+  'agents-active': ['launch', 'red-alert', 'hail', 'scan'],
+  'agents-complete': ['launch', 'red-alert', 'hail', 'scan'],
+  'iterating': ['launch', 'red-alert', 'hail', 'scan'],
+};
+
 function BottomBar({
   onLaunchAgent,
   onRedAlert,
   onHail,
   onScan,
   redAlertActive = false,
+  phase,
 }: HUDBottomBarProps) {
   const [pressedButton, setPressedButton] = useState<string | null>(null);
 
-  const buttons: ActionButton[] = [
+  const allButtons: ActionButton[] = [
     {
       id: 'launch',
-      label: 'LAUNCH AGENT',
+      label: phase === 'welcome' ? 'NEW MISSION' : phase === 'project-created' ? 'PLAN MISSION' : phase === 'agents-complete' ? 'RUN TESTS' : 'LAUNCH AGENT',
       color: 'var(--cyan-glow, #00c8ff)',
       glowColor: 'rgba(0, 200, 255, 0.4)',
       handler: onLaunchAgent,
@@ -236,6 +259,9 @@ function BottomBar({
       handler: onScan,
     },
   ];
+
+  const visibleIds = phase ? (PHASE_BUTTONS[phase] || PHASE_BUTTONS['agents-active']) : ['launch', 'red-alert', 'hail', 'scan'];
+  const buttons = allButtons.filter(b => visibleIds.includes(b.id));
 
   const handlePress = useCallback((btn: ActionButton) => {
     setPressedButton(btn.id);
@@ -297,6 +323,9 @@ export default function HUD({
   onHail,
   onScan,
   redAlertActive,
+  suggestedView,
+  badgeCounts,
+  phase,
 }: HUDProps) {
   return (
     <div style={styles.hudContainer}>
@@ -306,6 +335,8 @@ export default function HUD({
         onNavigate={onNavigate}
         collapsed={collapsed}
         onToggle={onToggle}
+        suggestedView={suggestedView}
+        badgeCounts={badgeCounts}
       />
       <BottomBar
         onLaunchAgent={onLaunchAgent}
@@ -313,6 +344,7 @@ export default function HUD({
         onHail={onHail}
         onScan={onScan}
         redAlertActive={redAlertActive}
+        phase={phase}
       />
 
       {/* Scan Line Effect */}
@@ -488,6 +520,32 @@ const styles: Record<string, React.CSSProperties> = {
   navLabel: {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
+    flex: 1,
+  },
+
+  suggestedDot: {
+    width: 6,
+    height: 6,
+    borderRadius: '50%',
+    backgroundColor: 'var(--cyan-glow, #00c8ff)',
+    boxShadow: '0 0 6px rgba(0, 200, 255, 0.6)',
+    animation: 'pulse-glow 2s ease-in-out infinite',
+    flexShrink: 0,
+    marginLeft: 'auto',
+  },
+
+  badgeCount: {
+    fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+    fontSize: '9px',
+    fontWeight: 700,
+    color: 'var(--cyan-glow, #00c8ff)',
+    backgroundColor: 'rgba(0, 200, 255, 0.15)',
+    border: '1px solid rgba(0, 200, 255, 0.3)',
+    borderRadius: 8,
+    padding: '1px 6px',
+    flexShrink: 0,
+    minWidth: 18,
+    textAlign: 'center' as const,
   },
 
   /* --- Bottom Bar --- */

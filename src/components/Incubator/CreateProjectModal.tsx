@@ -1,4 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { useProjectStore } from '../../stores/projectStore';
+import { useFlowStore } from '../../stores/flowStore';
+import { useUIStore } from '../../stores/uiStore';
 
 /* ============================================================
    CreateProjectModal - New Project Creation Dialog
@@ -18,6 +21,9 @@ interface CreateProjectModalProps {
    ========================================================== */
 
 export default function CreateProjectModal({ onClose, sendMessage }: CreateProjectModalProps) {
+  const { addProject, setActiveProject } = useProjectStore();
+  const { addToast } = useFlowStore();
+  const { setView } = useUIStore();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [cwd, setCwd] = useState('');
@@ -57,15 +63,45 @@ export default function CreateProjectModal({ onClose, sendMessage }: CreateProje
     const trimmedName = name.trim();
     if (!trimmedName) return;
 
+    const projectId = crypto.randomUUID();
+    const trimmedCwd = cwd.trim();
+
+    // Add project to local store immediately
+    addProject({
+      id: projectId,
+      name: trimmedName,
+      description: description.trim(),
+      cwd: trimmedCwd,
+      status: 'active',
+      health: 'healthy',
+      progress: 0,
+      agents: [],
+      createdAt: Date.now(),
+    });
+    setActiveProject(projectId);
+
+    // Send to server
     sendMessage({
       type: 'project:create',
       name: trimmedName,
       description: description.trim(),
-      cwd: cwd.trim(),
+      cwd: trimmedCwd,
+    });
+
+    // Toast notification
+    addToast({
+      type: 'success',
+      title: 'MISSION ESTABLISHED',
+      message: `Project "${trimmedName}" created`,
+      duration: 4000,
+      action: { label: 'PLAN', view: 'planning' },
     });
 
     handleClose();
-  }, [name, description, cwd, sendMessage, handleClose]);
+
+    // Navigate to planning after modal closes
+    setTimeout(() => setView('planning'), 300);
+  }, [name, description, cwd, sendMessage, handleClose, addProject, setActiveProject, addToast, setView]);
 
   /* ---------- Keyboard shortcut: Ctrl/Cmd + Enter to create ---------- */
   const handleKeyDown = useCallback(

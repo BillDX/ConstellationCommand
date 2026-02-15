@@ -1,6 +1,8 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { useProjectStore } from '../../stores/projectStore';
 import { useAgentStore } from '../../stores/agentStore';
+import { usePlanningStore } from '../../stores/planningStore';
+import { useUIStore } from '../../stores/uiStore';
 
 /* ============================================================
    MissionPlanning - Mission Briefing / Task Planning View
@@ -12,13 +14,7 @@ import { useAgentStore } from '../../stores/agentStore';
 
 interface MissionPlanningProps {
   sendMessage: (msg: any) => void;
-}
-
-interface Task {
-  id: string;
-  text: string;
-  completed: boolean;
-  agentId?: string;
+  onWarp?: () => void;
 }
 
 /* ---------- Utility ---------- */
@@ -51,13 +47,15 @@ function getAgentStatusColor(status: string): string {
    Main Component
    ========================================================== */
 
-export default function MissionPlanning({ sendMessage }: MissionPlanningProps) {
+export default function MissionPlanning({ sendMessage, onWarp }: MissionPlanningProps) {
   const { projects, activeProjectId } = useProjectStore();
   const { agents } = useAgentStore();
+  const { setView } = useUIStore();
+  const planningStore = usePlanningStore();
 
   const activeProject = activeProjectId ? projects[activeProjectId] : null;
 
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const tasks = activeProjectId ? planningStore.getProjectTasks(activeProjectId) : [];
   const [newTaskText, setNewTaskText] = useState('');
   const [hoveredTaskId, setHoveredTaskId] = useState<string | null>(null);
   const [hoveredButton, setHoveredButton] = useState<string | null>(null);
@@ -97,13 +95,10 @@ export default function MissionPlanning({ sendMessage }: MissionPlanningProps) {
   /* ---------- Add Task ---------- */
   const handleAddTask = useCallback(() => {
     const text = newTaskText.trim();
-    if (!text) return;
-    setTasks((prev) => [
-      ...prev,
-      { id: generateId(), text, completed: false },
-    ]);
+    if (!text || !activeProjectId) return;
+    planningStore.addTask(activeProjectId, text);
     setNewTaskText('');
-  }, [newTaskText]);
+  }, [newTaskText, activeProjectId, planningStore]);
 
   const handleAddTaskKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -116,51 +111,52 @@ export default function MissionPlanning({ sendMessage }: MissionPlanningProps) {
 
   /* ---------- Toggle Task ---------- */
   const handleToggleTask = useCallback((taskId: string) => {
-    setTasks((prev) =>
-      prev.map((t) => (t.id === taskId ? { ...t, completed: !t.completed } : t)),
-    );
-  }, []);
+    if (!activeProjectId) return;
+    planningStore.toggleTask(activeProjectId, taskId);
+  }, [activeProjectId, planningStore]);
 
   /* ---------- Remove Task ---------- */
   const handleRemoveTask = useCallback((taskId: string) => {
-    setTasks((prev) => prev.filter((t) => t.id !== taskId));
-  }, []);
+    if (!activeProjectId) return;
+    planningStore.removeTask(activeProjectId, taskId);
+  }, [activeProjectId, planningStore]);
 
   /* ---------- Launch Single Task ---------- */
   const handleLaunchTask = useCallback(
-    (task: Task) => {
-      if (!activeProject) return;
+    (task: { id: string; text: string }) => {
+      if (!activeProject || !activeProjectId) return;
       const agentId = generateId();
-      setTasks((prev) =>
-        prev.map((t) => (t.id === task.id ? { ...t, agentId } : t)),
-      );
+      planningStore.assignAgent(activeProjectId, task.id, agentId);
       sendMessage({
         type: 'agent:launch',
+        id: agentId,
         projectId: activeProject.id,
         task: task.text,
         cwd: activeProject.cwd,
       });
     },
-    [activeProject, sendMessage],
+    [activeProject, activeProjectId, sendMessage, planningStore],
   );
 
   /* ---------- Begin Mission (Launch All Unchecked) ---------- */
   const handleBeginMission = useCallback(() => {
-    if (!activeProject) return;
+    if (!activeProject || !activeProjectId) return;
     const uncompletedTasks = tasks.filter((t) => !t.completed && !t.agentId);
     for (const task of uncompletedTasks) {
       const agentId = generateId();
-      setTasks((prev) =>
-        prev.map((t) => (t.id === task.id ? { ...t, agentId } : t)),
-      );
+      planningStore.assignAgent(activeProjectId, task.id, agentId);
       sendMessage({
         type: 'agent:launch',
+        id: agentId,
         projectId: activeProject.id,
         task: task.text,
         cwd: activeProject.cwd,
       });
     }
-  }, [activeProject, tasks, sendMessage]);
+    // Trigger warp effect and navigate to tactical
+    if (onWarp) onWarp();
+    setTimeout(() => setView('tactical'), 1000);
+  }, [activeProject, activeProjectId, tasks, sendMessage, planningStore, onWarp, setView]);
 
   /* ---------- Counts ---------- */
   const unlaunchedCount = tasks.filter((t) => !t.completed && !t.agentId).length;

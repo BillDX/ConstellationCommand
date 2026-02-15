@@ -30,9 +30,38 @@ export function useWebSocket() {
   const sendMessage = useCallback((message: WSClientMessage) => {
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(message));
+      // Wrap flat client messages into the payload format the server expects
+      let wrapped: any;
+      switch (message.type) {
+        case 'agent:launch':
+          wrapped = { type: 'agent:launch', payload: { id: message.id, projectId: message.projectId, task: message.task, cwd: message.cwd } };
+          break;
+        case 'agent:kill':
+          wrapped = { type: 'agent:kill', payload: { agentId: message.agentId } };
+          break;
+        case 'terminal:input':
+          wrapped = { type: 'terminal:input', payload: { agentId: message.agentId, data: message.data } };
+          break;
+        case 'terminal:resize':
+          wrapped = { type: 'terminal:resize', payload: { agentId: message.agentId, cols: message.cols, rows: message.rows } };
+          break;
+        case 'project:create':
+          wrapped = { type: 'project:create', payload: { id: crypto.randomUUID(), name: message.name, description: message.description, cwd: message.cwd } };
+          break;
+        case 'state:request':
+          wrapped = message; // No payload needed
+          break;
+        default:
+          wrapped = message;
+      }
+      ws.send(JSON.stringify(wrapped));
     }
   }, []);
+
+  // Map server status values to client status values
+  type AgentStatus = 'queued' | 'launching' | 'active' | 'completed' | 'error';
+  const statusMap: Record<string, string> = { launched: 'launching', running: 'active' };
+  const mapStatus = (status: string): AgentStatus => (statusMap[status] || status) as AgentStatus;
 
   const handleMessage = useCallback((data: WSServerMessage) => {
     switch (data.type) {
@@ -44,43 +73,106 @@ export function useWebSocket() {
         break;
       }
 
-      case 'event': {
-        const event = {
-          id: `${data.agentId}-${Date.now()}`,
-          agentId: data.agentId,
-          type: data.event as any,
-          detail: data.detail,
-          timestamp: Date.now(),
-        };
-        addEvent(data.agentId, event);
-        break;
-      }
-
       case 'agent:status': {
-        const updates: Record<string, any> = { status: data.status };
-        if (data.status === 'completed' || data.status === 'error') {
-          updates.completedAt = Date.now();
+        const mappedStatus = mapStatus(data.status);
+        const updates: Record<string, any> = { status: mappedStatus };
+        if (mappedStatus === 'completed' || mappedStatus === 'error') {
+          updates.completedAt = data.timestamp || Date.now();
         }
         updateAgent(data.agentId, updates);
         break;
       }
 
+      case 'file:created':
+      case 'file:edited': {
+        const event = {
+          id: `${data.agentId}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          agentId: data.agentId,
+          type: data.type as any,
+          detail: { path: data.path },
+          timestamp: data.timestamp || Date.now(),
+        };
+        addEvent(data.agentId, event);
+        // Increment filesChanged count
+        const agent = useAgentStore.getState().agents[data.agentId];
+        if (agent) {
+          updateAgent(data.agentId, { filesChanged: (agent.filesChanged || 0) + 1 });
+        }
+        break;
+      }
+
+      case 'build:started':
+      case 'build:succeeded':
+      case 'build:error': {
+        const event = {
+          id: `${data.agentId}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          agentId: data.agentId,
+          type: data.type as any,
+          detail: { message: data.message },
+          timestamp: data.timestamp || Date.now(),
+        };
+        addEvent(data.agentId, event);
+        break;
+      }
+
+      case 'task:completed': {
+        const event = {
+          id: `${data.agentId}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          agentId: data.agentId,
+          type: 'task:completed' as any,
+          detail: {},
+          timestamp: data.timestamp || Date.now(),
+        };
+        addEvent(data.agentId, event);
+        break;
+      }
+
       case 'fs:change': {
-        // File system change events are informational;
-        // the server tracks filesChanged counts and pushes agent updates
+        // File system change events are informational
+        break;
+      }
+
+      case 'git:status': {
+        // Git status updates - informational for now
         break;
       }
 
       case 'state:sync': {
         // Bulk sync projects and agents from server
+        // Server sends Records, convert to arrays and map fields
         const agentStore = useAgentStore.getState();
         const projectStore = useProjectStore.getState();
 
-        for (const project of data.projects) {
-          projectStore.addProject(project);
+        const serverProjects = data.projects || {};
+        for (const proj of Object.values(serverProjects)) {
+          const p = proj as any;
+          projectStore.addProject({
+            id: p.id,
+            name: p.name,
+            description: p.description || '',
+            cwd: p.cwd,
+            status: p.status || 'active',
+            health: p.health || 'healthy',
+            progress: p.progress ?? 0,
+            agents: p.agents || [],
+            createdAt: p.createdAt || Date.now(),
+          });
         }
-        for (const agent of data.agents) {
-          agentStore.addAgent(agent);
+
+        const serverAgents = data.agents || {};
+        for (const ag of Object.values(serverAgents)) {
+          const a = ag as any;
+          agentStore.addAgent({
+            id: a.id,
+            projectId: a.projectId,
+            task: a.task,
+            cwd: a.cwd,
+            status: mapStatus(a.status),
+            launchedAt: a.launchedAt,
+            completedAt: a.completedAt,
+            filesChanged: a.filesChanged ?? 0,
+            events: a.events || [],
+          });
         }
         break;
       }
@@ -117,7 +209,11 @@ export function useWebSocket() {
 
     ws.onmessage = (event) => {
       try {
-        const data: WSServerMessage = JSON.parse(event.data);
+        const raw = JSON.parse(event.data);
+        // Server sends payload-wrapped messages; unwrap for handlers
+        const data: WSServerMessage = raw.payload
+          ? { type: raw.type, ...raw.payload }
+          : raw;
         handleMessage(data);
       } catch {
         // Ignore malformed messages

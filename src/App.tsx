@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import Starfield from './components/Viewscreen/Starfield';
 import AmbientParticles from './components/Viewscreen/AmbientParticles';
 import ScanlineOverlay from './components/Viewscreen/ScanlineOverlay';
@@ -16,11 +16,25 @@ import WarpEffect from './components/Viewscreen/WarpEffect';
 import TransporterEffect from './components/Viewscreen/TransporterEffect';
 import ShieldEffect from './components/Viewscreen/ShieldEffect';
 import ScanSweep from './components/Viewscreen/ScanSweep';
+import EmptyTactical from './components/Viewscreen/EmptyTactical';
+import WelcomeOverlay from './components/Welcome/WelcomeOverlay';
+import ToastContainer from './components/Feedback/ToastContainer';
+import AgentStatusStrip from './components/Feedback/AgentStatusStrip';
 import { useUIStore } from './stores/uiStore';
 import { useProjectStore } from './stores/projectStore';
 import { useAgentStore } from './stores/agentStore';
+import { useFlowStore } from './stores/flowStore';
 import { useWebSocket } from './hooks/useWebSocket';
 import type { Agent } from './types';
+
+/* ---------- View title mapping ---------- */
+const VIEW_SUBTITLES: Record<string, string> = {
+  tactical: 'ACTIVE MISSIONS',
+  incubator: 'PROJECT INCUBATOR',
+  planning: 'MISSION PLANNING',
+  logs: 'SYSTEM LOGS',
+  status: 'SHIP STATUS',
+};
 
 export default function App() {
   const {
@@ -30,6 +44,7 @@ export default function App() {
   } = useUIStore();
   const { projects, activeProjectId } = useProjectStore();
   const { agents } = useAgentStore();
+  const { phase, suggestedView, welcomeSeen, computePhase, addToast } = useFlowStore();
   const { sendMessage, connectionStatus } = useWebSocket();
 
   // Visual effect states
@@ -41,14 +56,79 @@ export default function App() {
 
   const activeProject = activeProjectId ? projects[activeProjectId] : null;
 
+  // Agent lists
+  const agentList = useMemo(() => Object.values(agents), [agents]);
+  const activeAgents = useMemo(() => agentList.filter(a => a.status === 'active' || a.status === 'launching'), [agentList]);
+  const completedAgents = useMemo(() => agentList.filter(a => a.status === 'completed'), [agentList]);
+
   // Get agents for the active project
   const projectAgents: Agent[] = useMemo(() => {
     if (!activeProject) return [];
-    return Object.values(agents).filter(a => a.projectId === activeProject.id);
-  }, [agents, activeProject]);
+    return agentList.filter(a => a.projectId === activeProject.id);
+  }, [agentList, activeProject]);
 
   // Get selected agent for console panel
   const selectedAgent = consolePanelAgentId ? agents[consolePanelAgentId] : null;
+
+  // Compute flow phase whenever projects/agents change
+  useEffect(() => {
+    computePhase(Object.keys(projects).length, activeAgents.length, completedAgents.length);
+  }, [projects, activeAgents.length, completedAgents.length, computePhase]);
+
+  // Track previous agent count for auto-open and toasts
+  const prevAgentCountRef = useRef(agentList.length);
+  const prevAgentStatusRef = useRef<Record<string, string>>({});
+
+  useEffect(() => {
+    // Detect new agents for transporter effect + auto-open console
+    if (agentList.length > prevAgentCountRef.current) {
+      setTransporterActive(true);
+      setTransporterPos({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+
+      // Auto-open console when only 1 active agent
+      if (activeAgents.length === 1) {
+        setTimeout(() => {
+          openConsole(activeAgents[0].id);
+        }, 1000);
+      }
+    }
+    prevAgentCountRef.current = agentList.length;
+
+    // Detect status changes for toasts and effects
+    for (const agent of agentList) {
+      const prevStatus = prevAgentStatusRef.current[agent.id];
+      if (prevStatus && prevStatus !== agent.status) {
+        if (agent.status === 'completed') {
+          setTransporterActive(true);
+          addToast({
+            type: 'success',
+            title: 'MISSION COMPLETE',
+            message: `Agent ${agent.id.slice(0, 6).toUpperCase()} completed`,
+            duration: 5000,
+            action: { label: 'VIEW', view: 'tactical' },
+          });
+        } else if (agent.status === 'error') {
+          setShieldActive(true);
+          addToast({
+            type: 'error',
+            title: 'AGENT ERROR',
+            message: `Agent ${agent.id.slice(0, 6).toUpperCase()} encountered an error`,
+            duration: 8000,
+          });
+        }
+      }
+      prevAgentStatusRef.current[agent.id] = agent.status;
+    }
+  }, [agentList, activeAgents, openConsole, addToast]);
+
+  // Auto-open create project modal when arriving at incubator from welcome
+  const prevViewRef = useRef(currentView);
+  useEffect(() => {
+    if (currentView === 'incubator' && prevViewRef.current !== 'incubator' && Object.keys(projects).length === 0) {
+      setTimeout(() => setShowCreateProject(true), 500);
+    }
+    prevViewRef.current = currentView;
+  }, [currentView, projects]);
 
   // Red Alert handler — shield flash + kill all agents
   const handleRedAlert = useCallback(() => {
@@ -60,10 +140,24 @@ export default function App() {
     });
   }, [agents, sendMessage]);
 
-  // Launch modal with warp effect
-  const handleLaunchAgent = useCallback(() => {
-    openLaunchModal();
-  }, [openLaunchModal]);
+  // Phase-aware primary action button
+  const handlePrimaryAction = useCallback(() => {
+    if (phase === 'welcome' || phase === 'project-created') {
+      // Navigate to incubator or planning
+      if (phase === 'welcome') {
+        setWarpActive(true);
+        setTimeout(() => setView('incubator'), 400);
+      } else {
+        setWarpActive(true);
+        setTimeout(() => setView('planning'), 400);
+      }
+    } else if (phase === 'agents-complete') {
+      // Run tests - open launch modal pre-filled
+      openLaunchModal();
+    } else {
+      openLaunchModal();
+    }
+  }, [phase, setView, openLaunchModal]);
 
   // View navigation with warp transition
   const handleNavigate = useCallback((view: string) => {
@@ -74,6 +168,18 @@ export default function App() {
       }, 400);
     }
   }, [currentView, setView]);
+
+  // Warp trigger for MissionPlanning BEGIN MISSION
+  const handleMissionWarp = useCallback(() => {
+    setWarpActive(true);
+  }, []);
+
+  // Badge counts for sidebar
+  const badgeCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    if (activeAgents.length > 0) counts.tactical = activeAgents.length;
+    return counts;
+  }, [activeAgents.length]);
 
   return (
     <div className="app">
@@ -116,9 +222,12 @@ export default function App() {
         </>
       )}
 
+      {/* Empty Tactical - no active project */}
+      {currentView === 'tactical' && !activeProject && <EmptyTactical />}
+
       {/* Mission Planning View */}
       {currentView === 'planning' && (
-        <MissionPlanning sendMessage={sendMessage} />
+        <MissionPlanning sendMessage={sendMessage} onWarp={handleMissionWarp} />
       )}
 
       {/* Project Incubator / Galaxy Map View */}
@@ -134,11 +243,13 @@ export default function App() {
 
       {/* HUD Overlay */}
       <HUD
+        title={activeProject?.name ?? 'NO ACTIVE MISSION'}
+        subtitle={VIEW_SUBTITLES[currentView] ?? 'ACTIVE MISSIONS'}
         activeView={currentView}
         onNavigate={handleNavigate}
         collapsed={sidebarCollapsed}
         onToggle={toggleSidebar}
-        onLaunchAgent={handleLaunchAgent}
+        onLaunchAgent={handlePrimaryAction}
         onRedAlert={handleRedAlert}
         onHail={() => {
           const active = Object.values(agents).find(a => a.status === 'active');
@@ -147,7 +258,19 @@ export default function App() {
         onScan={() => {
           sendMessage({ type: 'state:request' });
         }}
+        suggestedView={suggestedView}
+        badgeCounts={badgeCounts}
+        phase={phase}
       />
+
+      {/* Agent Status Strip */}
+      <AgentStatusStrip />
+
+      {/* Toast Notifications */}
+      <ToastContainer />
+
+      {/* Welcome Overlay */}
+      {phase === 'welcome' && !welcomeSeen && <WelcomeOverlay />}
 
       {/* Agent Console Panel */}
       {showConsolePanel && consolePanelAgentId && selectedAgent && (

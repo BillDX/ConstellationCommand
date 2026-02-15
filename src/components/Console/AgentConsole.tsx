@@ -128,16 +128,8 @@ export default function AgentConsole({ agentId, onClose, sendMessage }: AgentCon
   );
 
   /* ---------- Action Button Handlers ---------- */
-  const handlePause = useCallback(() => {
-    sendMessage({ type: 'agent:pause', agentId });
-  }, [agentId, sendMessage]);
-
   const handleTerminate = useCallback(() => {
     sendMessage({ type: 'agent:kill', agentId });
-  }, [agentId, sendMessage]);
-
-  const handleViewFiles = useCallback(() => {
-    sendMessage({ type: 'agent:files', agentId });
   }, [agentId, sendMessage]);
 
   /* ---------- Close with Animation ---------- */
@@ -246,6 +238,52 @@ export default function AgentConsole({ agentId, onClose, sendMessage }: AgentCon
           <div style={styles.headerSeparator} />
         </header>
 
+        {/* ========== COMPLETION / ERROR BANNERS ========== */}
+        {agent?.status === 'completed' && (
+          <div style={{
+            padding: '12px 20px',
+            background: 'rgba(0, 255, 136, 0.08)',
+            borderBottom: '1px solid rgba(0, 255, 136, 0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            zIndex: 5,
+            position: 'relative',
+          }}>
+            <span style={{ fontSize: '14px', color: 'var(--green-success, #00ff88)' }}>{'\u2713'}</span>
+            <span style={{
+              fontFamily: "var(--font-display, 'Orbitron', sans-serif)",
+              fontSize: '11px',
+              fontWeight: 700,
+              letterSpacing: '3px',
+              color: 'var(--green-success, #00ff88)',
+              textShadow: '0 0 10px rgba(0, 255, 136, 0.5)',
+            }}>MISSION COMPLETE</span>
+          </div>
+        )}
+        {agent?.status === 'error' && (
+          <div style={{
+            padding: '12px 20px',
+            background: 'rgba(255, 51, 68, 0.08)',
+            borderBottom: '1px solid rgba(255, 51, 68, 0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            zIndex: 5,
+            position: 'relative',
+          }}>
+            <span style={{ fontSize: '14px', color: 'var(--red-alert, #ff3344)' }}>{'\u2717'}</span>
+            <span style={{
+              fontFamily: "var(--font-display, 'Orbitron', sans-serif)",
+              fontSize: '11px',
+              fontWeight: 700,
+              letterSpacing: '3px',
+              color: 'var(--red-alert, #ff3344)',
+              textShadow: '0 0 10px rgba(255, 51, 68, 0.5)',
+            }}>AGENT ERROR</span>
+          </div>
+        )}
+
         {/* ========== MAIN CONTENT ========== */}
         <div style={styles.mainContent}>
           {/* Terminal + Command Input Area */}
@@ -292,31 +330,20 @@ export default function AgentConsole({ agentId, onClose, sendMessage }: AgentCon
         <footer style={styles.footer}>
           <div style={styles.footerSeparator} />
           <div style={styles.actionRow}>
-            {/* Pause Agent */}
-            <button
-              onClick={handlePause}
-              style={{
-                ...styles.actionButton,
-                borderColor: 'var(--amber-alert, #ff9f1c)',
-                color: 'var(--amber-alert, #ff9f1c)',
-                boxShadow: '0 0 8px rgba(255, 159, 28, 0.3)',
-              }}
-            >
-              <span style={styles.cornerClipTL} />
-              <span style={styles.cornerClipTR} />
-              <span style={styles.cornerClipBL} />
-              <span style={styles.cornerClipBR} />
-              <span style={styles.actionButtonLabel}>PAUSE AGENT</span>
-            </button>
-
             {/* Terminate Agent */}
             <button
               onClick={handleTerminate}
               style={{
                 ...styles.actionButton,
-                borderColor: 'var(--red-alert, #ff3344)',
-                color: 'var(--red-alert, #ff3344)',
-                boxShadow: '0 0 8px rgba(255, 51, 68, 0.3)',
+                borderColor: agent?.status === 'completed'
+                  ? 'var(--text-secondary, #7a8ba8)'
+                  : 'var(--red-alert, #ff3344)',
+                color: agent?.status === 'completed'
+                  ? 'var(--text-secondary, #7a8ba8)'
+                  : 'var(--red-alert, #ff3344)',
+                boxShadow: agent?.status === 'completed'
+                  ? '0 0 8px rgba(122, 139, 168, 0.2)'
+                  : '0 0 8px rgba(255, 51, 68, 0.3)',
               }}
             >
               <span style={styles.cornerClipTL} />
@@ -324,23 +351,6 @@ export default function AgentConsole({ agentId, onClose, sendMessage }: AgentCon
               <span style={styles.cornerClipBL} />
               <span style={styles.cornerClipBR} />
               <span style={styles.actionButtonLabel}>TERMINATE AGENT</span>
-            </button>
-
-            {/* View Files */}
-            <button
-              onClick={handleViewFiles}
-              style={{
-                ...styles.actionButton,
-                borderColor: 'var(--cyan-glow, #00c8ff)',
-                color: 'var(--cyan-glow, #00c8ff)',
-                boxShadow: '0 0 8px rgba(0, 200, 255, 0.3)',
-              }}
-            >
-              <span style={styles.cornerClipTL} />
-              <span style={styles.cornerClipTR} />
-              <span style={styles.cornerClipBL} />
-              <span style={styles.cornerClipBR} />
-              <span style={styles.actionButtonLabel}>VIEW FILES</span>
             </button>
           </div>
         </footer>

@@ -87,25 +87,45 @@ export default function TerminalContainer({ agentId, sendMessage }: TerminalCont
       }
     });
 
-    /* ---------- WebSocket Connection ---------- */
+    /* ---------- WebSocket Connection with Retry ---------- */
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
     const wsUrl = `${protocol}//${host}/ws/terminal/${agentId}`;
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
 
-    ws.onopen = () => {
-      const attachAddon = new AttachAddon(ws);
-      terminal.loadAddon(attachAddon);
-    };
+    terminal.writeln('\x1b[36m[CONNECTING]\x1b[0m Connecting to agent terminal...');
 
-    ws.onerror = () => {
-      terminal.writeln('\r\n\x1b[31m[CONNECTION ERROR]\x1b[0m Unable to connect to agent terminal.');
-    };
+    let wsAttempt = 0;
+    const maxAttempts = 3;
+    const retryDelay = 500;
 
-    ws.onclose = () => {
-      terminal.writeln('\r\n\x1b[33m[DISCONNECTED]\x1b[0m Terminal session ended.');
-    };
+    function connectWs() {
+      wsAttempt++;
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        terminal.writeln('\x1b[32m--- TERMINAL SESSION ESTABLISHED ---\x1b[0m\r\n');
+        const attachAddon = new AttachAddon(ws);
+        terminal.loadAddon(attachAddon);
+      };
+
+      ws.onerror = () => {
+        if (wsAttempt < maxAttempts) {
+          terminal.writeln(`\x1b[33m[RETRY ${wsAttempt}/${maxAttempts}]\x1b[0m Reconnecting...`);
+          setTimeout(connectWs, retryDelay);
+        } else {
+          terminal.writeln('\r\n\x1b[31m[CONNECTION ERROR]\x1b[0m Unable to connect to agent terminal.');
+        }
+      };
+
+      ws.onclose = () => {
+        if (wsAttempt >= maxAttempts) {
+          terminal.writeln('\r\n\x1b[33m[DISCONNECTED]\x1b[0m Terminal session ended.');
+        }
+      };
+    }
+
+    connectWs();
 
     /* ---------- Resize Handling ---------- */
     const handleResize = () => {

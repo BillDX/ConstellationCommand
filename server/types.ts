@@ -81,6 +81,20 @@ export interface GitMonitorStopMessage {
   payload: { projectId: string };
 }
 
+export interface ProjectCreateMessage {
+  type: 'project:create';
+  payload: {
+    id: string;
+    name: string;
+    description: string;
+    cwd: string;
+  };
+}
+
+export interface StateRequestMessage {
+  type: 'state:request';
+}
+
 export type ClientMessage =
   | AgentLaunchMessage
   | AgentKillMessage
@@ -89,7 +103,9 @@ export type ClientMessage =
   | ProjectWatchMessage
   | ProjectUnwatchMessage
   | GitMonitorStartMessage
-  | GitMonitorStopMessage;
+  | GitMonitorStopMessage
+  | ProjectCreateMessage
+  | StateRequestMessage;
 
 // ── WebSocket messages: Server → Client ──────────────────────────────────
 
