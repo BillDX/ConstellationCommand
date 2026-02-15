@@ -38,9 +38,10 @@ E2E tests use Playwright with system Chromium (`/usr/bin/chromium`). Test suites
 - Incubator view (galaxy map, NEW PROJECT button, CreateProjectModal)
 - Project creation (toast, planning navigation, directory preview, slug sanitization)
 - Planning view (mission planning panel, task input, adding tasks, Enter key, persistence)
-- Agent launch (modal fields, CWD read-only, auto-navigate, console auto-open)
+- Agent launch (modal fields, CWD read-only, auto-navigate, console auto-open, full context prompt)
 - Agent communication (terminal connection, task display, activity feed, terminate, close)
 - System logs (log viewer, filter buttons, search, agent launch log entries)
+- Test resilience (handles auto-opened consoles from server state between tests)
 - Status view (4-panel dashboard, system metrics)
 - Launch modal (open, fields, disabled/enabled state, Cancel, ESC)
 - Path security (no editable CWD in any modal)
@@ -77,7 +78,21 @@ Two WebSocket routes:
 - `/ws/terminal/:agentId` — Raw terminal I/O for a specific agent session
 
 ## Claude Code Integration
-All Claude Code sessions are spawned with `--dangerously-skip-permissions` flag via node-pty. The task prompt is written to stdin after a 1-second boot delay. The OutputParser watches stdout for file creation, build events, errors, and completions, then emits structured events over WebSocket to the frontend. Lifecycle events (spawn, first output, task sent, exit) are broadcast as log entries to the System Logs view.
+All Claude Code sessions are spawned with `--dangerously-skip-permissions` flag via node-pty. The `CLAUDECODE` environment variable is stripped before spawning to prevent "nested session" errors when the server itself runs inside a Claude Code session.
+
+**Full context prompts**: When an agent is launched (from either the Launch Modal or Mission Planning), the prompt sent to Claude Code includes the full project context:
+- Project name and description
+- All mission plan tasks (with completion status)
+- The specific task directive
+
+The task prompt is written to stdin after a 1-second boot delay. The OutputParser watches stdout for file creation, build events, errors, and completions, then emits structured events over WebSocket to the frontend. Lifecycle events (spawn, first output, task sent, exit) are broadcast as log entries to the System Logs view.
+
+**Launch flows**:
+- **Launch Modal** (from tactical view bottom bar): Opens a modal for entering a task directive; sends full context prompt to Claude Code
+- **Mission Planning per-task LAUNCH**: Launches an agent for a single task from the mission plan
+- **BEGIN MISSION**: Launches agents for all uncompleted/unassigned tasks in the mission plan simultaneously
+
+All launch flows auto-navigate to the tactical view and auto-open the agent console.
 
 ## Path Security
 All project directories are auto-created under `~/.constellation-command/projects/<slug>/`. The server:

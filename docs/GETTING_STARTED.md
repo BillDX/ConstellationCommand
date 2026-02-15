@@ -67,17 +67,25 @@ After creating a project, you're taken to the **Mission Planning** view. Here yo
 - Add task directives using the task input field
 - Press **ADD** or hit **Enter** to add each task
 - Build a checklist of what you want your Claude Code agents to accomplish
+- Click **LAUNCH** next to any individual task to launch an agent for that task
+- Click **BEGIN MISSION** to launch agents for all uncompleted tasks at once
+
+**Important**: Your project name, description, and the full mission plan are automatically included as context when any agent is launched. Claude Code will see the big picture alongside its specific task.
 
 ### Step 4: Launch an Agent
 
-Navigate to **Active Missions** (tactical view) using the sidebar. You'll see your project represented as a planet.
+There are three ways to launch agents:
 
-Click **LAUNCH AGENT** in the bottom action bar. The Launch Modal opens:
+#### Option A: From Mission Planning (recommended)
+Use the per-task **LAUNCH** buttons or **BEGIN MISSION** button described above. This is the recommended flow because it automatically includes your mission plan as context.
+
+#### Option B: From the Tactical View
+Navigate to **Active Missions** (tactical view) using the sidebar. Click **LAUNCH AGENT** in the bottom action bar. The Launch Modal opens:
 
 - **Task Directive**: Describe what you want Claude Code to do (e.g., "Set up a React project with TypeScript and Tailwind CSS")
 - **Working Directory**: Automatically set to your project's directory (read-only)
 
-Click **LAUNCH** (or press **Ctrl+Enter**).
+Click **LAUNCH** (or press **Ctrl+Enter**). The Launch Modal also includes your project context and mission plan tasks in the prompt sent to Claude Code.
 
 ### Step 5: Watch Claude Code Work
 
@@ -147,9 +155,27 @@ npm run test:e2e           # Run all 64 E2E tests
 npx playwright test --headed  # Run with visible browser
 ```
 
+## What Claude Code Sees
+
+When you launch an agent, the prompt sent to Claude Code includes:
+
+```
+Project: My Web App
+Description: A React dashboard for monitoring server health
+Mission Plan:
+  1. Set up React project with TypeScript
+  2. Add Tailwind CSS for styling
+  3. Create health check API endpoints
+
+Your task: Set up React project with TypeScript
+```
+
+This ensures each agent understands the full project context, not just its individual task.
+
 ## Troubleshooting
 
 - **CREATE button not working**: Hard refresh (Ctrl+Shift+R) to pick up latest JavaScript bundle.
 - **No terminal output**: Make sure `claude` CLI is installed and in your PATH.
+- **Agent shows ERROR immediately**: If running ConstellationCommand inside a Claude Code session, this is handled automatically (the `CLAUDECODE` env var is stripped). If it persists, check that `claude --version` works in your terminal.
 - **Connection issues**: Check that port 3000 is not blocked. The connection status indicator (bottom-right) should show CONNECTED.
 - **Path errors**: Project directories are auto-created under `~/.constellation-command/projects/`. Ensure the home directory is writable.

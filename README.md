@@ -28,7 +28,8 @@ For a detailed walkthrough, see the **[Getting Started Guide](docs/GETTING_START
 
 - **Tactical Viewscreen** — Animated planet + orbiting moon visualization for projects and agents
 - **Live Agent Terminals** — Real-time xterm.js consoles showing Claude Code conversations via WebSocket
-- **Mission Planning** — Task checklists to organize what your agents should accomplish
+- **Full Context Prompts** — Agents receive project name, description, and mission plan alongside their task
+- **Mission Planning** — Task checklists with per-task launch or BEGIN MISSION to launch all at once
 - **Project Incubator** — Galaxy map for creating and managing multiple projects
 - **System Logs** — Filterable event feed with agent lifecycle, file, and build events
 - **Ship Status Dashboard** — System metrics and health monitoring
@@ -51,9 +52,9 @@ Claude Code CLI sessions
 
 ## How It Works
 
-1. **Create a project** — Give it a name, and the server creates a sandboxed directory
+1. **Create a project** — Give it a name and description; the server creates a sandboxed directory
 2. **Plan your mission** — Add task directives in the Mission Planning view
-3. **Launch agents** — Each agent spawns a Claude Code CLI session with your task
+3. **Launch agents** — Each agent spawns a Claude Code CLI session with your full project context
 4. **Watch live** — The agent console auto-opens, showing the terminal in real-time
 5. **Monitor events** — System Logs track file changes, builds, and agent lifecycle
 
