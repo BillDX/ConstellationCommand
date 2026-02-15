@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useProjectStore } from '../../stores/projectStore';
 import { useAgentStore } from '../../stores/agentStore';
+import { usePlanningStore } from '../../stores/planningStore';
 import { useUIStore } from '../../stores/uiStore';
 import { generateId } from '../../utils/generateId';
 
@@ -57,6 +58,25 @@ export default function LaunchModal({ onClose, sendMessage }: LaunchModalProps) 
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleClose]);
 
+  /* ---------- Build Full Task Prompt ---------- */
+  const buildPrompt = useCallback((taskText: string) => {
+    const parts: string[] = [];
+    parts.push(`Project: ${activeProject?.name ?? 'Unknown'}`);
+    if (activeProject?.description) {
+      parts.push(`Description: ${activeProject.description}`);
+    }
+    const projectId = activeProject?.id ?? '';
+    if (projectId) {
+      const tasks = usePlanningStore.getState().getProjectTasks(projectId);
+      if (tasks.length > 0) {
+        const taskList = tasks.map((t, i) => `  ${i + 1}. ${t.completed ? '[DONE] ' : ''}${t.text}`).join('\n');
+        parts.push(`Mission Plan:\n${taskList}`);
+      }
+    }
+    parts.push(`\nYour task: ${taskText}`);
+    return parts.join('\n');
+  }, [activeProject]);
+
   /* ---------- Launch handler ---------- */
   const handleLaunch = useCallback(() => {
     const trimmedTask = task.trim();
@@ -65,6 +85,7 @@ export default function LaunchModal({ onClose, sendMessage }: LaunchModalProps) 
     const projectId = activeProject?.id ?? 'default';
     const cwd = activeProject?.cwd || '';
     const agentId = generateId();
+    const fullPrompt = buildPrompt(trimmedTask);
 
     // Register agent in client store immediately
     useAgentStore.getState().addAgent({
@@ -78,12 +99,12 @@ export default function LaunchModal({ onClose, sendMessage }: LaunchModalProps) 
       events: [],
     });
 
-    // Send launch message to server with agent ID
+    // Send launch message to server with full context prompt
     sendMessage({
       type: 'agent:launch',
       id: agentId,
       projectId,
-      task: trimmedTask,
+      task: fullPrompt,
       cwd,
     });
 
@@ -93,7 +114,7 @@ export default function LaunchModal({ onClose, sendMessage }: LaunchModalProps) 
     setTimeout(() => openConsole(agentId), 800);
 
     handleClose();
-  }, [task, activeProject, sendMessage, handleClose]);
+  }, [task, activeProject, sendMessage, handleClose, buildPrompt]);
 
   /* ---------- Keyboard shortcut: Ctrl/Cmd + Enter to launch ---------- */
   const handleKeyDown = useCallback(

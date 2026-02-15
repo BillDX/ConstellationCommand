@@ -113,42 +113,99 @@ export default function MissionPlanning({ sendMessage, onWarp }: MissionPlanning
     planningStore.removeTask(activeProjectId, taskId);
   }, [activeProjectId, planningStore]);
 
+  /* ---------- Build Full Task Prompt ---------- */
+  const buildPrompt = useCallback((taskText: string) => {
+    const parts: string[] = [];
+    parts.push(`Project: ${activeProject?.name ?? 'Unknown'}`);
+    if (activeProject?.description) {
+      parts.push(`Description: ${activeProject.description}`);
+    }
+    if (tasks.length > 0) {
+      const taskList = tasks.map((t, i) => `  ${i + 1}. ${t.completed ? '[DONE] ' : ''}${t.text}`).join('\n');
+      parts.push(`Mission Plan:\n${taskList}`);
+    }
+    parts.push(`\nYour task: ${taskText}`);
+    return parts.join('\n');
+  }, [activeProject, tasks]);
+
   /* ---------- Launch Single Task ---------- */
   const handleLaunchTask = useCallback(
     (task: { id: string; text: string }) => {
       if (!activeProject || !activeProjectId) return;
       const agentId = generateId();
+      const fullPrompt = buildPrompt(task.text);
+
+      // Register agent in client store immediately
+      useAgentStore.getState().addAgent({
+        id: agentId,
+        projectId: activeProject.id,
+        task: task.text,
+        cwd: activeProject.cwd,
+        status: 'launching',
+        launchedAt: Date.now(),
+        filesChanged: 0,
+        events: [],
+      });
+
       planningStore.assignAgent(activeProjectId, task.id, agentId);
       sendMessage({
         type: 'agent:launch',
         id: agentId,
         projectId: activeProject.id,
-        task: task.text,
+        task: fullPrompt,
         cwd: activeProject.cwd,
       });
+
+      // Navigate to tactical and open console
+      setView('tactical');
+      setTimeout(() => useUIStore.getState().openConsole(agentId), 800);
     },
-    [activeProject, activeProjectId, sendMessage, planningStore],
+    [activeProject, activeProjectId, sendMessage, planningStore, buildPrompt, setView],
   );
 
   /* ---------- Begin Mission (Launch All Unchecked) ---------- */
   const handleBeginMission = useCallback(() => {
     if (!activeProject || !activeProjectId) return;
     const uncompletedTasks = tasks.filter((t) => !t.completed && !t.agentId);
+    let lastAgentId = '';
+
     for (const task of uncompletedTasks) {
       const agentId = generateId();
+      lastAgentId = agentId;
+      const fullPrompt = buildPrompt(task.text);
+
+      // Register agent in client store immediately
+      useAgentStore.getState().addAgent({
+        id: agentId,
+        projectId: activeProject.id,
+        task: task.text,
+        cwd: activeProject.cwd,
+        status: 'launching',
+        launchedAt: Date.now(),
+        filesChanged: 0,
+        events: [],
+      });
+
       planningStore.assignAgent(activeProjectId, task.id, agentId);
       sendMessage({
         type: 'agent:launch',
         id: agentId,
         projectId: activeProject.id,
-        task: task.text,
+        task: fullPrompt,
         cwd: activeProject.cwd,
       });
     }
+
     // Trigger warp effect and navigate to tactical
     if (onWarp) onWarp();
-    setTimeout(() => setView('tactical'), 1000);
-  }, [activeProject, activeProjectId, tasks, sendMessage, planningStore, onWarp, setView]);
+    setTimeout(() => {
+      setView('tactical');
+      // Auto-open console for the last launched agent
+      if (lastAgentId) {
+        setTimeout(() => useUIStore.getState().openConsole(lastAgentId), 800);
+      }
+    }, 1000);
+  }, [activeProject, activeProjectId, tasks, sendMessage, planningStore, buildPrompt, onWarp, setView]);
 
   /* ---------- Counts ---------- */
   const unlaunchedCount = tasks.filter((t) => !t.completed && !t.agentId).length;

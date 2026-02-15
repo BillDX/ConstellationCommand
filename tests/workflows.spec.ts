@@ -6,12 +6,25 @@ async function navigateTo(page: import('@playwright/test').Page, label: string) 
   await page.waitForTimeout(600);
 }
 
+// Close any open agent console (backdrop blocks sidebar clicks)
+async function closeConsoleIfOpen(page: import('@playwright/test').Page) {
+  const closeBtn = page.locator('button[aria-label="Close agent console"]');
+  if (await closeBtn.isVisible({ timeout: 500 }).catch(() => false)) {
+    await closeBtn.click();
+    await page.waitForTimeout(400);
+  }
+}
+
 // Dismiss the welcome overlay if visible, ending on the incubator view
 async function goToIncubator(page: import('@playwright/test').Page) {
   await page.goto('/');
+  // Wait for initial state sync and any auto-open animations
+  await page.waitForTimeout(1500);
+  // Close any auto-opened agent console (from server state sync)
+  await closeConsoleIfOpen(page);
   const beginBtn = page.getByText('BEGIN NEW MISSION');
   try {
-    await beginBtn.waitFor({ state: 'visible', timeout: 5000 });
+    await beginBtn.waitFor({ state: 'visible', timeout: 3000 });
     await beginBtn.click();
     await page.waitForTimeout(800);
     // Close auto-opened CreateProjectModal if it appeared
@@ -391,11 +404,14 @@ test.describe('Agent Communication Workflow', () => {
 test.describe('Welcome-to-Project Full Workflow', () => {
   test('complete flow from first load to planning with tasks', async ({ page }) => {
     await page.goto('/');
+    // Wait for state sync and close any auto-opened agent console
+    await page.waitForTimeout(1500);
+    await closeConsoleIfOpen(page);
 
     // Step 1: Welcome overlay appears
     const beginBtn = page.getByText('BEGIN NEW MISSION');
     try {
-      await beginBtn.waitFor({ state: 'visible', timeout: 5000 });
+      await beginBtn.waitFor({ state: 'visible', timeout: 3000 });
 
       // Step 2: Click BEGIN NEW MISSION
       await beginBtn.click();

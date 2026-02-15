@@ -7,12 +7,24 @@ async function navigateTo(page: import('@playwright/test').Page, label: string) 
   await page.waitForTimeout(600);
 }
 
+// Close any open agent console (backdrop blocks sidebar clicks)
+async function closeConsoleIfOpen(page: import('@playwright/test').Page) {
+  const closeBtn = page.locator('button[aria-label="Close agent console"]');
+  if (await closeBtn.isVisible({ timeout: 500 }).catch(() => false)) {
+    await closeBtn.click();
+    await page.waitForTimeout(400);
+  }
+}
+
 // Dismiss the welcome overlay if it's visible.
 // The typewriter animation takes ~3.3s before the button appears.
 async function dismissWelcome(page: import('@playwright/test').Page) {
+  // Wait for state sync and close any auto-opened agent console
+  await page.waitForTimeout(1500);
+  await closeConsoleIfOpen(page);
   try {
     const beginBtn = page.getByText('BEGIN NEW MISSION');
-    await beginBtn.waitFor({ state: 'visible', timeout: 5000 });
+    await beginBtn.waitFor({ state: 'visible', timeout: 3000 });
     await beginBtn.click();
     // Wait for overlay to close and auto-open CreateProjectModal to appear
     await page.waitForTimeout(800);
@@ -30,11 +42,14 @@ async function dismissWelcome(page: import('@playwright/test').Page) {
 // Helper: dismiss welcome overlay and create a project so we're in active phase
 async function setupProject(page: import('@playwright/test').Page, name = 'Test Project') {
   await page.goto('/');
+  // Wait for state sync and close any auto-opened agent console
+  await page.waitForTimeout(1500);
+  await closeConsoleIfOpen(page);
   // Try to dismiss welcome overlay if visible; if server already has projects
   // from a previous test the welcome overlay won't appear
   const beginBtn = page.getByText('BEGIN NEW MISSION');
   try {
-    await beginBtn.waitFor({ state: 'visible', timeout: 5000 });
+    await beginBtn.waitFor({ state: 'visible', timeout: 3000 });
     await beginBtn.click();
     await page.waitForTimeout(800);
   } catch {
