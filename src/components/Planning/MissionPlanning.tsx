@@ -3,6 +3,7 @@ import { useProjectStore } from '../../stores/projectStore';
 import { useAgentStore } from '../../stores/agentStore';
 import { usePlanningStore } from '../../stores/planningStore';
 import { useUIStore } from '../../stores/uiStore';
+import { generateId } from '../../utils/generateId';
 
 /* ============================================================
    MissionPlanning - Mission Briefing / Task Planning View
@@ -15,15 +16,6 @@ import { useUIStore } from '../../stores/uiStore';
 interface MissionPlanningProps {
   sendMessage: (msg: any) => void;
   onWarp?: () => void;
-}
-
-/* ---------- Utility ---------- */
-
-function generateId(): string {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
 }
 
 /* ---------- Status Color Helper ---------- */

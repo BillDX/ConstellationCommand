@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useProjectStore } from '../../stores/projectStore';
+import { generateId } from '../../utils/generateId';
 
 /* ============================================================
    LaunchModal - Agent Launch Dialog
@@ -12,15 +13,6 @@ import { useProjectStore } from '../../stores/projectStore';
 interface LaunchModalProps {
   onClose: () => void;
   sendMessage: (msg: any) => void;
-}
-
-/* ---------- Utility ---------- */
-
-function generateId(): string {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
 }
 
 /* ==========================================================

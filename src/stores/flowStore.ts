@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { View } from '../types';
+import { generateId } from '../utils/generateId';
 
 export type FlowPhase = 'welcome' | 'project-created' | 'planning' | 'agents-active' | 'agents-complete' | 'iterating';
 
@@ -65,7 +66,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   },
 
   addToast: (toast) => {
-    const id = crypto.randomUUID();
+    const id = generateId();
     set((state) => ({
       toasts: [...state.toasts.slice(-2), { ...toast, id }],
     }));

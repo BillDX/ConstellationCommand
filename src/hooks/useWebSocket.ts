@@ -48,7 +48,7 @@ export function useWebSocket() {
           wrapped = { type: 'terminal:resize', payload: { agentId: message.agentId, cols: message.cols, rows: message.rows } };
           break;
         case 'project:create':
-          wrapped = { type: 'project:create', payload: { id: crypto.randomUUID(), name: message.name, description: message.description } };
+          wrapped = { type: 'project:create', payload: { id: message.id, name: message.name, description: message.description } };
           break;
         case 'state:request':
           wrapped = message; // No payload needed

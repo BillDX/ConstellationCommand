@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { generateId } from '../utils/generateId';
 
 export interface PlanningTask {
   id: string;
@@ -24,7 +25,7 @@ export const usePlanningStore = create<PlanningState>()(
       tasks: {},
 
       addTask: (projectId, text) => {
-        const id = crypto.randomUUID();
+        const id = generateId();
         set((state) => ({
           tasks: {
             ...state.tasks,

@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useProjectStore } from '../../stores/projectStore';
 import { useFlowStore } from '../../stores/flowStore';
 import { useUIStore } from '../../stores/uiStore';
+import { generateId } from '../../utils/generateId';
 
 /* ============================================================
    CreateProjectModal - New Project Creation Dialog
@@ -71,7 +72,7 @@ export default function CreateProjectModal({ onClose, sendMessage }: CreateProje
     const trimmedName = name.trim();
     if (!trimmedName) return;
 
-    const projectId = crypto.randomUUID();
+    const projectId = generateId();
 
     // Add project to local store immediately (cwd will be populated by state:sync from server)
     addProject({
@@ -90,6 +91,7 @@ export default function CreateProjectModal({ onClose, sendMessage }: CreateProje
     // Send to server (server generates the project directory)
     sendMessage({
       type: 'project:create',
+      id: projectId,
       name: trimmedName,
       description: description.trim(),
     });
