@@ -185,6 +185,23 @@ export interface ValidationErrorMessage {
   };
 }
 
+export interface LogEntry {
+  id: string;
+  agentId?: string;
+  projectId?: string;
+  level: 'info' | 'warn' | 'error' | 'success';
+  source: string;
+  message: string;
+  timestamp: number;
+}
+
+export interface LogMessage {
+  type: 'log';
+  payload: {
+    entry: LogEntry;
+  };
+}
+
 export type ServerMessage =
   | StateSyncMessage
   | AgentStatusMessage
@@ -193,4 +210,5 @@ export type ServerMessage =
   | TaskCompletedMessage
   | FsChangeMessage
   | GitStatusMessage
-  | ValidationErrorMessage;
+  | ValidationErrorMessage
+  | LogMessage;

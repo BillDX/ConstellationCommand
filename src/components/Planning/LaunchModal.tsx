@@ -1,5 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useProjectStore } from '../../stores/projectStore';
+import { useAgentStore } from '../../stores/agentStore';
+import { useUIStore } from '../../stores/uiStore';
 import { generateId } from '../../utils/generateId';
 
 /* ============================================================
@@ -61,13 +63,34 @@ export default function LaunchModal({ onClose, sendMessage }: LaunchModalProps) 
     if (!trimmedTask) return;
 
     const projectId = activeProject?.id ?? 'default';
+    const cwd = activeProject?.cwd || '';
+    const agentId = generateId();
 
-    sendMessage({
-      type: 'agent:launch',
+    // Register agent in client store immediately
+    useAgentStore.getState().addAgent({
+      id: agentId,
       projectId,
       task: trimmedTask,
-      cwd: activeProject?.cwd || '',
+      cwd,
+      status: 'launching',
+      launchedAt: Date.now(),
+      filesChanged: 0,
+      events: [],
     });
+
+    // Send launch message to server with agent ID
+    sendMessage({
+      type: 'agent:launch',
+      id: agentId,
+      projectId,
+      task: trimmedTask,
+      cwd,
+    });
+
+    // Navigate to tactical view and auto-open console
+    const { setView, openConsole } = useUIStore.getState();
+    setView('tactical');
+    setTimeout(() => openConsole(agentId), 800);
 
     handleClose();
   }, [task, activeProject, sendMessage, handleClose]);

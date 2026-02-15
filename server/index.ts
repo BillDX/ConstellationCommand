@@ -13,6 +13,7 @@ import type {
   ClientMessage,
   ServerMessage,
   StateSyncMessage,
+  LogEntry,
 } from './types.js';
 import {
   getBaseDirectory,
@@ -73,6 +74,26 @@ function broadcast(msg: ServerMessage): void {
   }
 }
 
+let logCounter = 0;
+function broadcastLog(
+  level: LogEntry['level'],
+  source: string,
+  message: string,
+  agentId?: string,
+  projectId?: string,
+): void {
+  const entry: LogEntry = {
+    id: `log-${Date.now()}-${++logCounter}`,
+    level,
+    source,
+    message,
+    timestamp: Date.now(),
+    ...(agentId && { agentId }),
+    ...(projectId && { projectId }),
+  };
+  broadcast({ type: 'log', payload: { entry } });
+}
+
 function buildStateSync(): StateSyncMessage {
   return {
     type: 'state:sync',
@@ -91,6 +112,14 @@ sessionManager.on('agent:status', (data: { agentId: string; status: string; time
     }
   }
 
+  broadcastLog(
+    data.status === 'error' ? 'error' : 'info',
+    'AgentManager',
+    `Agent ${data.agentId.slice(0, 8)} status → ${data.status}`,
+    data.agentId,
+    agents[data.agentId]?.projectId,
+  );
+
   broadcast({
     type: 'agent:status',
     payload: {
@@ -99,6 +128,10 @@ sessionManager.on('agent:status', (data: { agentId: string; status: string; time
       timestamp: data.timestamp,
     },
   });
+});
+
+sessionManager.on('log', (data: { level: string; agentId: string; projectId: string; source: string; message: string }) => {
+  broadcastLog(data.level as LogEntry['level'], data.source, data.message, data.agentId, data.projectId);
 });
 
 sessionManager.outputParser.on('parsed', (evt) => {
@@ -243,6 +276,7 @@ async function handleClientMessage(msg: ClientMessage): Promise<void> {
       // Validate agent CWD is within the project directory
       const validation = await validateAgentCwd(cwd, projectCwd);
       if (!validation.valid) {
+        broadcastLog('warn', 'PathSecurity', `Agent launch blocked: ${validation.reason}`, id, projectId);
         broadcast({
           type: 'validation:error',
           payload: { message: validation.reason!, context: 'agent:launch' },
@@ -263,6 +297,7 @@ async function handleClientMessage(msg: ClientMessage): Promise<void> {
       // Add agent to project
       projects[projectId].agents.push(id);
 
+      broadcastLog('info', 'AgentManager', `Agent ${id.slice(0, 8)} launched for project "${projects[projectId].name}"`, id, projectId);
       sessionManager.launchAgent({ id, projectId, task, cwd });
       break;
     }
@@ -357,6 +392,7 @@ async function handleClientMessage(msg: ClientMessage): Promise<void> {
       };
       // Start file watcher on the created directory
       fileWatcher.watch(id, projectCwd);
+      broadcastLog('success', 'ProjectManager', `Project "${name}" created at ${projectCwd}`, undefined, id);
       // Broadcast updated state
       broadcast(buildStateSync());
       break;

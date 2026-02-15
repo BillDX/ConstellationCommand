@@ -294,6 +294,100 @@ test.describe('Path Security (Client-Side)', () => {
   });
 });
 
+test.describe('Agent Communication Workflow', () => {
+  // Helper: create project and launch an agent, returning the agent task text
+  async function launchAgent(page: import('@playwright/test').Page, projectName: string, taskText: string) {
+    await goToIncubator(page);
+    await createProject(page, projectName);
+    await navigateTo(page, 'Active Missions');
+    await page.getByText('LAUNCH AGENT', { exact: true }).click();
+
+    // Fill in task
+    const textarea = page.locator('textarea');
+    await textarea.fill(taskText);
+
+    // Click LAUNCH
+    const launchBtn = page.locator('button').filter({ hasText: /LAUNCH/ }).last();
+    await launchBtn.click();
+    await page.waitForTimeout(1500);
+  }
+
+  test('launching agent navigates to tactical view', async ({ page }) => {
+    await launchAgent(page, 'Tactical Nav', 'Test navigation after launch');
+
+    // Should be on tactical view (ACTIVE MISSIONS in the subtitle)
+    await expect(page.getByText('ACTIVE MISSIONS').first()).toBeVisible({ timeout: 3000 });
+  });
+
+  test('agent console auto-opens after launch', async ({ page }) => {
+    await launchAgent(page, 'Console Auto', 'Test console auto-open');
+
+    // Console panel should appear with TERMINAL SESSION header
+    await expect(page.getByText('TERMINAL SESSION', { exact: true })).toBeVisible({ timeout: 5000 });
+  });
+
+  test('terminal shows connection attempt', async ({ page }) => {
+    await launchAgent(page, 'Terminal Conn', 'Test terminal connection');
+
+    // The terminal container should be present (xterm renders inside it)
+    const terminal = page.locator('[data-agent-terminal]');
+    await expect(terminal).toBeVisible({ timeout: 5000 });
+  });
+
+  test('agent console shows task description', async ({ page }) => {
+    const taskText = 'Scan for anomalies in sector 7';
+    await launchAgent(page, 'Task Display', taskText);
+
+    // Console header should show the task (may appear in moon button too, use first)
+    await expect(page.getByText(taskText).first()).toBeVisible({ timeout: 5000 });
+  });
+
+  test('agent console has TERMINATE button', async ({ page }) => {
+    await launchAgent(page, 'Terminate Btn', 'Test terminate button');
+
+    // TERMINATE AGENT button should be visible
+    await expect(page.getByText('TERMINATE AGENT')).toBeVisible({ timeout: 5000 });
+  });
+
+  test('agent console has activity feed', async ({ page }) => {
+    await launchAgent(page, 'Activity Feed', 'Test activity feed');
+
+    // Activity feed section should be visible
+    await expect(page.getByText('ACTIVITY', { exact: true })).toBeVisible({ timeout: 5000 });
+  });
+
+  test('system logs show agent launch entry', async ({ page }) => {
+    await launchAgent(page, 'Log Check', 'Test log entry');
+
+    // Close console panel via the close button (backdrop blocks nav clicks)
+    await page.locator('button[aria-label="Close agent console"]').click();
+    await page.waitForTimeout(500);
+
+    // Navigate to System Logs
+    await navigateTo(page, 'System Logs');
+
+    // Should see a log entry about the agent launch
+    await expect(page.getByText(/launched for project/).first()).toBeVisible({ timeout: 5000 });
+  });
+
+  test('closing agent console returns to tactical view', async ({ page }) => {
+    await launchAgent(page, 'Close Console', 'Test close console');
+
+    // Console is open
+    await expect(page.getByText('TERMINAL SESSION', { exact: true })).toBeVisible({ timeout: 5000 });
+
+    // Click the close button (X)
+    await page.locator('button[aria-label="Close agent console"]').click();
+    await page.waitForTimeout(400);
+
+    // Console should be gone
+    await expect(page.getByText('TERMINAL SESSION', { exact: true })).not.toBeVisible();
+
+    // Should still see tactical view
+    await expect(page.getByText('ACTIVE MISSIONS').first()).toBeVisible();
+  });
+});
+
 test.describe('Welcome-to-Project Full Workflow', () => {
   test('complete flow from first load to planning with tasks', async ({ page }) => {
     await page.goto('/');

@@ -75,6 +75,7 @@ export class SessionManager extends EventEmitter {
 
     // Emit initial status
     this.emitStatus(config.id, 'launched');
+    this.emitLog('info', config.id, config.projectId, 'SessionManager', `PTY spawned for agent ${config.id.slice(0, 8)} in ${config.cwd}`);
 
     // After a brief moment mark as running
     setTimeout(() => {
@@ -84,8 +85,16 @@ export class SessionManager extends EventEmitter {
       }
     }, 500);
 
+    // Track whether we've seen first output
+    let firstOutput = true;
+
     // Forward pty output → terminal WS clients + OutputParser
     ptyProcess.onData((data: string) => {
+      if (firstOutput) {
+        firstOutput = false;
+        this.emitLog('info', config.id, config.projectId, 'SessionManager', `Agent ${config.id.slice(0, 8)} receiving stdout — Claude Code is running`);
+      }
+
       // Send raw data to all connected terminal WebSocket clients
       for (const ws of session.terminalClients) {
         if (ws.readyState === 1 /* WebSocket.OPEN */) {
@@ -104,6 +113,11 @@ export class SessionManager extends EventEmitter {
       session.completedAt = Date.now();
       session.status = exitCode === 0 ? 'completed' : 'error';
       this.emitStatus(config.id, session.status);
+      this.emitLog(
+        exitCode === 0 ? 'info' : 'error',
+        config.id, config.projectId, 'SessionManager',
+        `Agent ${config.id.slice(0, 8)} exited with code ${exitCode}`
+      );
 
       // Clean up parser buffer
       this.outputParser.clearBuffer(config.id);
@@ -114,6 +128,7 @@ export class SessionManager extends EventEmitter {
     if (config.task) {
       setTimeout(() => {
         ptyProcess.write(config.task + '\n');
+        this.emitLog('info', config.id, config.projectId, 'SessionManager', `Task sent to agent ${config.id.slice(0, 8)}`);
       }, 1000);
     }
   }
@@ -200,7 +215,11 @@ export class SessionManager extends EventEmitter {
   resizeSession(agentId: string, cols: number, rows: number): void {
     const session = this.sessions.get(agentId);
     if (!session) return;
-    session.pty.resize(cols, rows);
+    try {
+      session.pty.resize(cols, rows);
+    } catch {
+      // pty may have already exited — ignore resize errors
+    }
   }
 
   // ── internal ─────────────────────────────────────────────────────────
@@ -211,5 +230,9 @@ export class SessionManager extends EventEmitter {
       status,
       timestamp: Date.now(),
     });
+  }
+
+  private emitLog(level: string, agentId: string, projectId: string, source: string, message: string): void {
+    this.emit('log', { level, agentId, projectId, source, message });
   }
 }
