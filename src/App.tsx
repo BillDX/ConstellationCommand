@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import Starfield from './components/Viewscreen/Starfield';
 import AmbientParticles from './components/Viewscreen/AmbientParticles';
 import ScanlineOverlay from './components/Viewscreen/ScanlineOverlay';
@@ -6,6 +6,12 @@ import Planet from './components/Viewscreen/Planet';
 import OrbitalField from './components/Viewscreen/OrbitalField';
 import HUD from './components/Viewscreen/HUD';
 import AgentConsole from './components/Console/AgentConsole';
+import MissionPlanning from './components/Planning/MissionPlanning';
+import LaunchModal from './components/Planning/LaunchModal';
+import WarpEffect from './components/Viewscreen/WarpEffect';
+import TransporterEffect from './components/Viewscreen/TransporterEffect';
+import ShieldEffect from './components/Viewscreen/ShieldEffect';
+import ScanSweep from './components/Viewscreen/ScanSweep';
 import { useUIStore } from './stores/uiStore';
 import { useProjectStore } from './stores/projectStore';
 import { useAgentStore } from './stores/agentStore';
@@ -15,11 +21,18 @@ import type { Agent } from './types';
 export default function App() {
   const {
     currentView, sidebarCollapsed, showCRT, showConsolePanel, consolePanelAgentId,
-    setView, toggleSidebar, openLaunchModal, toggleProjectDetail, openConsole, closeConsole,
+    showLaunchModal,
+    setView, toggleSidebar, openLaunchModal, closeLaunchModal, toggleProjectDetail, openConsole, closeConsole,
   } = useUIStore();
   const { projects, activeProjectId } = useProjectStore();
   const { agents } = useAgentStore();
   const { sendMessage, connectionStatus } = useWebSocket();
+
+  // Visual effect states
+  const [warpActive, setWarpActive] = useState(false);
+  const [shieldActive, setShieldActive] = useState(false);
+  const [transporterActive, setTransporterActive] = useState(false);
+  const [transporterPos, setTransporterPos] = useState({ x: 0, y: 0 });
 
   const activeProject = activeProjectId ? projects[activeProjectId] : null;
 
@@ -32,12 +45,40 @@ export default function App() {
   // Get selected agent for console panel
   const selectedAgent = consolePanelAgentId ? agents[consolePanelAgentId] : null;
 
+  // Red Alert handler — shield flash + kill all agents
+  const handleRedAlert = useCallback(() => {
+    setShieldActive(true);
+    Object.values(agents).forEach(agent => {
+      if (agent.status === 'active' || agent.status === 'launching') {
+        sendMessage({ type: 'agent:kill', agentId: agent.id });
+      }
+    });
+  }, [agents, sendMessage]);
+
+  // Launch modal with warp effect
+  const handleLaunchAgent = useCallback(() => {
+    openLaunchModal();
+  }, [openLaunchModal]);
+
+  // View navigation with warp transition
+  const handleNavigate = useCallback((view: string) => {
+    if (view !== currentView) {
+      setWarpActive(true);
+      setTimeout(() => {
+        setView(view as any);
+      }, 400);
+    }
+  }, [currentView, setView]);
+
   return (
     <div className="app">
       {/* Background Layers */}
       <Starfield />
       <AmbientParticles />
       <ScanlineOverlay visible={showCRT} />
+
+      {/* Scan Sweep Radar — visible in tactical view */}
+      {currentView === 'tactical' && <ScanSweep active />}
 
       {/* Main Content - Tactical View */}
       {currentView === 'tactical' && activeProject && (
@@ -70,28 +111,24 @@ export default function App() {
         </>
       )}
 
+      {/* Mission Planning View */}
+      {currentView === 'planning' && (
+        <MissionPlanning sendMessage={sendMessage} />
+      )}
+
       {/* HUD Overlay */}
       <HUD
         activeView={currentView}
-        onNavigate={(view) => setView(view as any)}
+        onNavigate={handleNavigate}
         collapsed={sidebarCollapsed}
         onToggle={toggleSidebar}
-        onLaunchAgent={openLaunchModal}
-        onRedAlert={() => {
-          // Kill all active agents
-          Object.values(agents).forEach(agent => {
-            if (agent.status === 'active' || agent.status === 'launching') {
-              sendMessage({ type: 'agent:kill', agentId: agent.id });
-            }
-          });
-        }}
+        onLaunchAgent={handleLaunchAgent}
+        onRedAlert={handleRedAlert}
         onHail={() => {
-          // Focus on the first active agent's console
           const active = Object.values(agents).find(a => a.status === 'active');
           if (active) openConsole(active.id);
         }}
         onScan={() => {
-          // Request state sync from server
           sendMessage({ type: 'state:request' });
         }}
       />
@@ -104,6 +141,30 @@ export default function App() {
           sendMessage={sendMessage}
         />
       )}
+
+      {/* Launch Agent Modal */}
+      {showLaunchModal && (
+        <LaunchModal
+          onClose={closeLaunchModal}
+          sendMessage={sendMessage}
+        />
+      )}
+
+      {/* Visual Effects */}
+      <WarpEffect
+        active={warpActive}
+        onComplete={() => setWarpActive(false)}
+      />
+      <ShieldEffect
+        active={shieldActive}
+        onComplete={() => setShieldActive(false)}
+      />
+      <TransporterEffect
+        active={transporterActive}
+        x={transporterPos.x}
+        y={transporterPos.y}
+        onComplete={() => setTransporterActive(false)}
+      />
 
       {/* Connection Status Indicator */}
       <div style={{
