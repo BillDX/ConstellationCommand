@@ -15,6 +15,28 @@ Vintage Star Trek / retro sci-fi tactical command interface. The user is a Starf
 - `npm run dev` — Start both client (Vite HMR) and server (tsx watch)
 - `npm run build` — Build for production
 - `npm start` — Run production server
+- `npm run test:e2e` — Run Playwright E2E test suite
+
+## Testing
+E2E tests use Playwright with system Chromium (`/usr/bin/chromium`). The test suite is in `tests/app.spec.ts` and covers all 5 views, navigation, modals, and UI elements (35 tests).
+
+**Prerequisites**: Production build must exist in `dist/client/` (`npm run build` first). The test config auto-starts the Express server on port 3000.
+
+**Running tests**:
+- `npm run test:e2e` — Run all tests headless
+- `npx playwright test --headed` — Run with browser visible
+- `npx playwright test -g "Launch Modal"` — Run a specific test group
+
+**Test coverage**:
+- Page load & core layout (title, starfield, branding, stardate/clock, connection status)
+- HUD sidebar navigation (5 nav items, view switching, collapse/expand)
+- Tactical view (planet, scan sweep, action buttons)
+- Incubator view (galaxy map, NEW PROJECT button, CreateProjectModal)
+- Planning view (mission planning panel, task input, adding tasks)
+- Logs view (log viewer, filter buttons, search)
+- Status view (4-panel dashboard, system metrics)
+- Launch modal (open, fields, disabled/enabled state, Cancel, ESC)
+- Visual elements (CRT overlay, connection status indicator)
 
 ## File Structure
 - `server/` — Node.js backend (Express, WebSocket, pty management)
