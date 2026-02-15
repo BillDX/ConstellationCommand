@@ -1,19 +1,36 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import Starfield from './components/Viewscreen/Starfield';
 import AmbientParticles from './components/Viewscreen/AmbientParticles';
 import ScanlineOverlay from './components/Viewscreen/ScanlineOverlay';
 import Planet from './components/Viewscreen/Planet';
+import OrbitalField from './components/Viewscreen/OrbitalField';
 import HUD from './components/Viewscreen/HUD';
+import AgentConsole from './components/Console/AgentConsole';
 import { useUIStore } from './stores/uiStore';
 import { useProjectStore } from './stores/projectStore';
+import { useAgentStore } from './stores/agentStore';
 import { useWebSocket } from './hooks/useWebSocket';
+import type { Agent } from './types';
 
 export default function App() {
-  const { currentView, sidebarCollapsed, showCRT, setView, toggleSidebar, openLaunchModal, toggleProjectDetail } = useUIStore();
+  const {
+    currentView, sidebarCollapsed, showCRT, showConsolePanel, consolePanelAgentId,
+    setView, toggleSidebar, openLaunchModal, toggleProjectDetail, openConsole, closeConsole,
+  } = useUIStore();
   const { projects, activeProjectId } = useProjectStore();
-  const { connectionStatus } = useWebSocket();
+  const { agents } = useAgentStore();
+  const { sendMessage, connectionStatus } = useWebSocket();
 
   const activeProject = activeProjectId ? projects[activeProjectId] : null;
+
+  // Get agents for the active project
+  const projectAgents: Agent[] = useMemo(() => {
+    if (!activeProject) return [];
+    return Object.values(agents).filter(a => a.projectId === activeProject.id);
+  }, [agents, activeProject]);
+
+  // Get selected agent for console panel
+  const selectedAgent = consolePanelAgentId ? agents[consolePanelAgentId] : null;
 
   return (
     <div className="app">
@@ -22,26 +39,35 @@ export default function App() {
       <AmbientParticles />
       <ScanlineOverlay visible={showCRT} />
 
-      {/* Main Content */}
+      {/* Main Content - Tactical View */}
       {currentView === 'tactical' && activeProject && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 10,
-          pointerEvents: 'none',
-        }}>
-          <div style={{ pointerEvents: 'auto' }}>
-            <Planet
-              name={activeProject.name}
-              health={activeProject.health}
-              progress={activeProject.progress}
-              onClick={toggleProjectDetail}
-            />
+        <>
+          {/* Planet */}
+          <div style={{
+            position: 'fixed',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10,
+            pointerEvents: 'none',
+          }}>
+            <div style={{ pointerEvents: 'auto' }}>
+              <Planet
+                name={activeProject.name}
+                health={activeProject.health}
+                progress={activeProject.progress}
+                onClick={toggleProjectDetail}
+              />
+            </div>
           </div>
-        </div>
+
+          {/* Orbital Moons */}
+          <OrbitalField
+            agents={projectAgents}
+            onMoonClick={(agentId) => openConsole(agentId)}
+          />
+        </>
       )}
 
       {/* HUD Overlay */}
@@ -51,10 +77,33 @@ export default function App() {
         collapsed={sidebarCollapsed}
         onToggle={toggleSidebar}
         onLaunchAgent={openLaunchModal}
-        onRedAlert={() => console.log('RED ALERT')}
-        onHail={() => console.log('HAIL')}
-        onScan={() => console.log('SCAN')}
+        onRedAlert={() => {
+          // Kill all active agents
+          Object.values(agents).forEach(agent => {
+            if (agent.status === 'active' || agent.status === 'launching') {
+              sendMessage({ type: 'agent:kill', agentId: agent.id });
+            }
+          });
+        }}
+        onHail={() => {
+          // Focus on the first active agent's console
+          const active = Object.values(agents).find(a => a.status === 'active');
+          if (active) openConsole(active.id);
+        }}
+        onScan={() => {
+          // Request state sync from server
+          sendMessage({ type: 'state:request' });
+        }}
       />
+
+      {/* Agent Console Panel */}
+      {showConsolePanel && consolePanelAgentId && selectedAgent && (
+        <AgentConsole
+          agentId={consolePanelAgentId}
+          onClose={closeConsole}
+          sendMessage={sendMessage}
+        />
+      )}
 
       {/* Connection Status Indicator */}
       <div style={{
