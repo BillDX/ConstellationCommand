@@ -30,6 +30,11 @@ app.use(express.json());
 const clientDistPath = join(__dirname, '..', 'dist', 'client');
 app.use(express.static(clientDistPath));
 
+// SPA catch-all — serve index.html for any non-API/non-asset route
+app.get('/{*path}', (_req, res) => {
+  res.sendFile(join(clientDistPath, 'index.html'));
+});
+
 const httpServer = createServer(app);
 
 // ── State ────────────────────────────────────────────────────────────────

@@ -9,7 +9,11 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    outDir: 'dist/client',
+  },
   server: {
+    host: true,
     port: 5173,
     proxy: {
       '/ws': {
