@@ -8,6 +8,10 @@ import HUD from './components/Viewscreen/HUD';
 import AgentConsole from './components/Console/AgentConsole';
 import MissionPlanning from './components/Planning/MissionPlanning';
 import LaunchModal from './components/Planning/LaunchModal';
+import GalaxyMap from './components/Incubator/GalaxyMap';
+import CreateProjectModal from './components/Incubator/CreateProjectModal';
+import SystemLogs from './components/Logs/SystemLogs';
+import StatusView from './components/Status/StatusView';
 import WarpEffect from './components/Viewscreen/WarpEffect';
 import TransporterEffect from './components/Viewscreen/TransporterEffect';
 import ShieldEffect from './components/Viewscreen/ShieldEffect';
@@ -33,6 +37,7 @@ export default function App() {
   const [shieldActive, setShieldActive] = useState(false);
   const [transporterActive, setTransporterActive] = useState(false);
   const [transporterPos, setTransporterPos] = useState({ x: 0, y: 0 });
+  const [showCreateProject, setShowCreateProject] = useState(false);
 
   const activeProject = activeProjectId ? projects[activeProjectId] : null;
 
@@ -116,6 +121,17 @@ export default function App() {
         <MissionPlanning sendMessage={sendMessage} />
       )}
 
+      {/* Project Incubator / Galaxy Map View */}
+      {currentView === 'incubator' && (
+        <GalaxyMap onCreateProject={() => setShowCreateProject(true)} />
+      )}
+
+      {/* System Logs View */}
+      {currentView === 'logs' && <SystemLogs />}
+
+      {/* Ship Status View */}
+      {currentView === 'status' && <StatusView />}
+
       {/* HUD Overlay */}
       <HUD
         activeView={currentView}
@@ -146,6 +162,14 @@ export default function App() {
       {showLaunchModal && (
         <LaunchModal
           onClose={closeLaunchModal}
+          sendMessage={sendMessage}
+        />
+      )}
+
+      {/* Create Project Modal */}
+      {showCreateProject && (
+        <CreateProjectModal
+          onClose={() => setShowCreateProject(false)}
           sendMessage={sendMessage}
         />
       )}
