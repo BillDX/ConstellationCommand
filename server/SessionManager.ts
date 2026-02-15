@@ -53,12 +53,17 @@ export class SessionManager extends EventEmitter {
       throw new Error(`Agent ${config.id} is already running`);
     }
 
+    // Strip CLAUDECODE env var to prevent "nested session" error when
+    // ConstellationCommand's server itself runs inside a Claude Code session
+    const cleanEnv = { ...process.env } as Record<string, string>;
+    delete cleanEnv.CLAUDECODE;
+
     const ptyProcess = pty.spawn('claude', ['--dangerously-skip-permissions'], {
       name: 'xterm-256color',
       cols: 120,
       rows: 40,
       cwd: config.cwd,
-      env: process.env as Record<string, string>,
+      env: cleanEnv,
     });
 
     const session: Session = {
