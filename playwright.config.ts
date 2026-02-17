@@ -29,7 +29,7 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: 'npx tsx server/index.ts',
+    command: 'CC_PASSWORD=test-password-e2e npx tsx server/index.ts',
     port: 3000,
     reuseExistingServer: !process.env.CI,
     timeout: 15_000,

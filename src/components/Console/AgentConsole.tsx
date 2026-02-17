@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useEffect, useCallback, useMemo, useState } from 'react';
 import { useAgentStore } from '../../stores/agentStore';
 import ActivityFeed from './ActivityFeed';
 import TerminalContainer from './TerminalContainer';
@@ -15,6 +15,7 @@ interface AgentConsoleProps {
   agentId: string;
   onClose: () => void;
   sendMessage: (msg: any) => void;
+  authToken?: string | null;
 }
 
 /* ---------- Status Display Helpers ---------- */
@@ -86,9 +87,8 @@ function formatElapsed(ms: number): string {
    Main Component
    ========================================================== */
 
-export default function AgentConsole({ agentId, onClose, sendMessage }: AgentConsoleProps) {
+export default function AgentConsole({ agentId, onClose, sendMessage, authToken }: AgentConsoleProps) {
   const agent = useAgentStore((state) => state.agents[agentId]);
-  const [commandInput, setCommandInput] = useState('');
   const [elapsed, setElapsed] = useState(0);
   const [isClosing, setIsClosing] = useState(false);
 
@@ -111,21 +111,6 @@ export default function AgentConsole({ agentId, onClose, sendMessage }: AgentCon
     const id = setInterval(update, 1000);
     return () => clearInterval(id);
   }, [agent?.launchedAt, agent?.completedAt]);
-
-  /* ---------- Command Input Handler ---------- */
-  const handleCommandSubmit = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === 'Enter' && commandInput.trim()) {
-        sendMessage({
-          type: 'terminal:input',
-          agentId,
-          data: commandInput + '\n',
-        });
-        setCommandInput('');
-      }
-    },
-    [commandInput, agentId, sendMessage],
-  );
 
   /* ---------- Action Button Handlers ---------- */
   const handleTerminate = useCallback(() => {
@@ -299,25 +284,10 @@ export default function AgentConsole({ agentId, onClose, sendMessage }: AgentCon
 
               {/* Terminal content */}
               <div style={styles.terminalContent}>
-                <TerminalContainer agentId={agentId} sendMessage={sendMessage} />
+                <TerminalContainer agentId={agentId} sendMessage={sendMessage} authToken={authToken} />
               </div>
             </div>
 
-            {/* Command Input */}
-            <div style={styles.commandInputContainer}>
-              <span style={styles.commandPrompt}>{'\u25B6'}</span>
-              <input
-                type="text"
-                value={commandInput}
-                onChange={(e) => setCommandInput(e.target.value)}
-                onKeyDown={handleCommandSubmit}
-                placeholder="Enter command..."
-                style={styles.commandInput}
-                spellCheck={false}
-                autoComplete="off"
-              />
-              <span style={styles.commandHint}>ENTER</span>
-            </div>
           </div>
 
           {/* Activity Feed Sidebar */}
@@ -622,50 +592,6 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     position: 'relative',
     overflow: 'hidden',
-  },
-
-  /* --- Command Input --- */
-  commandInputContainer: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 8,
-    padding: '0 2px',
-    flexShrink: 0,
-  },
-
-  commandPrompt: {
-    fontSize: '10px',
-    color: 'var(--cyan-glow, #00c8ff)',
-    textShadow: '0 0 6px rgba(0, 200, 255, 0.5)',
-    flexShrink: 0,
-  },
-
-  commandInput: {
-    flex: 1,
-    height: 36,
-    padding: '0 12px',
-    background: 'rgba(10, 14, 23, 0.9)',
-    border: '1px solid rgba(0, 200, 255, 0.3)',
-    borderRadius: 2,
-    color: 'var(--text-primary, #e0f0ff)',
-    fontFamily: "var(--font-body, 'Rajdhani', sans-serif)",
-    fontSize: '14px',
-    fontWeight: 500,
-    letterSpacing: '0.5px',
-    outline: 'none',
-    transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
-    boxShadow: 'inset 0 0 10px rgba(0, 0, 0, 0.4)',
-  },
-
-  commandHint: {
-    fontFamily: "var(--font-display, 'Orbitron', sans-serif)",
-    fontSize: '7px',
-    fontWeight: 700,
-    letterSpacing: '1.5px',
-    color: 'var(--text-secondary, #7a8ba8)',
-    opacity: 0.4,
-    flexShrink: 0,
   },
 
   /* --- Activity Sidebar --- */

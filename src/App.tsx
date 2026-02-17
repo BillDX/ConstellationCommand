@@ -18,12 +18,14 @@ import ShieldEffect from './components/Viewscreen/ShieldEffect';
 import ScanSweep from './components/Viewscreen/ScanSweep';
 import EmptyTactical from './components/Viewscreen/EmptyTactical';
 import WelcomeOverlay from './components/Welcome/WelcomeOverlay';
+import LoginOverlay from './components/Auth/LoginOverlay';
 import ToastContainer from './components/Feedback/ToastContainer';
 import AgentStatusStrip from './components/Feedback/AgentStatusStrip';
 import { useUIStore } from './stores/uiStore';
 import { useProjectStore } from './stores/projectStore';
 import { useAgentStore } from './stores/agentStore';
 import { useFlowStore } from './stores/flowStore';
+import { useAuthStore } from './stores/authStore';
 import { useWebSocket } from './hooks/useWebSocket';
 import type { Agent } from './types';
 
@@ -45,7 +47,13 @@ export default function App() {
   const { projects, activeProjectId } = useProjectStore();
   const { agents } = useAgentStore();
   const { phase, suggestedView, welcomeSeen, computePhase, addToast } = useFlowStore();
-  const { sendMessage, connectionStatus } = useWebSocket();
+  const { phase: authPhase, token: authToken, checkStatus: checkAuthStatus } = useAuthStore();
+  const { sendMessage, connectionStatus } = useWebSocket(authToken);
+
+  // Check auth status on mount
+  useEffect(() => {
+    checkAuthStatus();
+  }, [checkAuthStatus]);
 
   // Visual effect states
   const [warpActive, setWarpActive] = useState(false);
@@ -269,6 +277,9 @@ export default function App() {
       {/* Toast Notifications */}
       <ToastContainer />
 
+      {/* Auth Overlay */}
+      {authPhase !== 'authenticated' && <LoginOverlay />}
+
       {/* Welcome Overlay */}
       {phase === 'welcome' && !welcomeSeen && <WelcomeOverlay />}
 
@@ -278,6 +289,7 @@ export default function App() {
           agentId={consolePanelAgentId}
           onClose={closeConsole}
           sendMessage={sendMessage}
+          authToken={authToken}
         />
       )}
 

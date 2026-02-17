@@ -7,6 +7,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { SessionManager } from './SessionManager.js';
 import { FileWatcher } from './FileWatcher.js';
 import { GitMonitor } from './GitMonitor.js';
+import { authManager, securityHeaders } from './auth.js';
 import type {
   Agent,
   Project,
@@ -26,13 +27,100 @@ import {
 // ── Config ───────────────────────────────────────────────────────────────
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
-const AUTH_TOKEN = process.env.AUTH_TOKEN ?? '';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // ── Express app ──────────────────────────────────────────────────────────
 
 const app = express();
 app.use(express.json());
+app.use(securityHeaders);
+
+// ── Auth API routes (before static files) ────────────────────────────────
+
+app.get('/auth/setup-required', (_req, res) => {
+  res.json({ setupRequired: authManager.isSetupRequired() });
+});
+
+app.post('/auth/setup', (req, res) => {
+  if (!authManager.isSetupRequired()) {
+    res.status(400).json({ error: 'Password already configured' });
+    return;
+  }
+
+  const { password } = req.body;
+  if (!password || typeof password !== 'string') {
+    res.status(400).json({ error: 'Password is required' });
+    return;
+  }
+
+  const result = authManager.setPassword(password);
+  if (!result.success) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+
+  const token = authManager.createSession();
+  res.json({ token });
+});
+
+app.post('/auth/login', (req, res) => {
+  if (authManager.isSetupRequired()) {
+    res.status(400).json({ error: 'Password not configured. Use /auth/setup first.' });
+    return;
+  }
+
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  const rateLimit = authManager.checkRateLimit(ip);
+  if (!rateLimit.allowed) {
+    res.status(429).json({
+      error: 'Too many attempts',
+      remainingAttempts: 0,
+      retryAfterMs: rateLimit.retryAfterMs,
+    });
+    return;
+  }
+
+  const { password } = req.body;
+  if (!password || typeof password !== 'string') {
+    res.status(400).json({ error: 'Password is required' });
+    return;
+  }
+
+  if (!authManager.verifyPassword(password)) {
+    authManager.recordFailedAttempt(ip);
+    const updated = authManager.checkRateLimit(ip);
+    res.status(401).json({
+      error: 'Invalid password',
+      remainingAttempts: updated.remainingAttempts,
+      retryAfterMs: updated.retryAfterMs,
+    });
+    return;
+  }
+
+  authManager.clearRateLimit(ip);
+  const token = authManager.createSession();
+  res.json({ token });
+});
+
+app.post('/auth/logout', (req, res) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if (token) {
+    authManager.destroySession(token);
+  }
+  res.json({ success: true });
+});
+
+app.get('/auth/status', (req, res) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+
+  if (token && authManager.validateSession(token)) {
+    res.json({ authenticated: true });
+  } else {
+    res.status(401).json({ authenticated: false });
+  }
+});
 
 // Serve static files from dist/client in production
 const clientDistPath = join(__dirname, '..', 'dist', 'client');
@@ -175,14 +263,12 @@ httpServer.on('upgrade', (request, socket, head) => {
   const parsedUrl = parseUrl(request.url ?? '', true);
   const pathname = parsedUrl.pathname ?? '';
 
-  // Optional auth token check
-  if (AUTH_TOKEN) {
-    const token = parsedUrl.query.token as string | undefined;
-    if (token !== AUTH_TOKEN) {
-      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-      socket.destroy();
-      return;
-    }
+  // Require valid session token for WebSocket connections
+  const token = parsedUrl.query.token as string | undefined;
+  if (!token || !authManager.validateSession(token)) {
+    socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+    socket.destroy();
+    return;
   }
 
   // Route: /ws/terminal/:agentId
@@ -408,6 +494,9 @@ async function handleClientMessage(msg: ClientMessage): Promise<void> {
 // ── Start server ─────────────────────────────────────────────────────────
 
 (async () => {
+  await authManager.init();
+  console.log(`Auth: ${authManager.isSetupRequired() ? 'Setup required (no password configured)' : 'Password configured'}`);
+
   await ensureBaseDirectory();
   console.log(`Base project directory: ${getBaseDirectory()}`);
 

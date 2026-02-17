@@ -1,5 +1,19 @@
 import { test, expect } from '@playwright/test';
 
+// Authenticate if the login overlay is visible
+async function authenticate(page: import('@playwright/test').Page) {
+  const checkpoint = page.getByText('SECURITY CHECKPOINT');
+  try {
+    await checkpoint.waitFor({ state: 'visible', timeout: 3000 });
+    const passwordInput = page.locator('input[type="password"]');
+    await passwordInput.fill('test-password-e2e');
+    await page.getByText('AUTHENTICATE', { exact: true }).click();
+    await expect(checkpoint).not.toBeVisible({ timeout: 5000 });
+  } catch {
+    // Login overlay not present (already authenticated)
+  }
+}
+
 // Navigation has a 400ms warp-effect delay before the view switches
 async function navigateTo(page: import('@playwright/test').Page, label: string) {
   await page.getByText(label, { exact: true }).click();
@@ -19,6 +33,7 @@ async function closeConsoleIfOpen(page: import('@playwright/test').Page) {
 // Dismiss the welcome overlay if it's visible.
 // The typewriter animation takes ~3.3s before the button appears.
 async function dismissWelcome(page: import('@playwright/test').Page) {
+  await authenticate(page);
   // Wait for state sync and close any auto-opened agent console
   await page.waitForTimeout(1500);
   await closeConsoleIfOpen(page);
@@ -42,6 +57,7 @@ async function dismissWelcome(page: import('@playwright/test').Page) {
 // Helper: dismiss welcome overlay and create a project so we're in active phase
 async function setupProject(page: import('@playwright/test').Page, name = 'Test Project') {
   await page.goto('/');
+  await authenticate(page);
   // Wait for state sync and close any auto-opened agent console
   await page.waitForTimeout(1500);
   await closeConsoleIfOpen(page);
@@ -83,18 +99,21 @@ test.describe('Page Load & Core Layout', () => {
 
   test('HUD top bar shows branding', async ({ page }) => {
     await page.goto('/');
+    await authenticate(page);
     // Both the welcome overlay and top bar have CONSTELLATION COMMAND - just check first one
     await expect(page.getByText('CONSTELLATION COMMAND').first()).toBeVisible();
   });
 
   test('stardate and clock are displayed', async ({ page }) => {
     await page.goto('/');
+    await authenticate(page);
     await expect(page.getByText(/SD \d{4}\.\d{3}/)).toBeVisible();
     await expect(page.getByText(/\d{2}:\d{2}:\d{2}/)).toBeVisible();
   });
 
   test('connection status indicator is visible', async ({ page }) => {
     await page.goto('/');
+    await authenticate(page);
     await expect(page.getByText(/CONNECTED|CONNECTING|DISCONNECTED/)).toBeVisible();
   });
 });
@@ -102,17 +121,20 @@ test.describe('Page Load & Core Layout', () => {
 test.describe('Welcome Flow', () => {
   test('welcome overlay is visible on first load', async ({ page }) => {
     await page.goto('/');
+    await authenticate(page);
     await expect(page.getByText('BEGIN NEW MISSION')).toBeVisible({ timeout: 5000 });
   });
 
   test('welcome overlay shows CONSTELLATION COMMAND logo', async ({ page }) => {
     await page.goto('/');
+    await authenticate(page);
     const logos = page.getByText('CONSTELLATION COMMAND');
     await expect(logos.first()).toBeVisible();
   });
 
   test('BEGIN NEW MISSION navigates to incubator', async ({ page }) => {
     await page.goto('/');
+    await authenticate(page);
     const beginBtn = page.getByText('BEGIN NEW MISSION');
     await beginBtn.waitFor({ state: 'visible', timeout: 5000 });
     await beginBtn.click();
@@ -178,6 +200,7 @@ test.describe('HUD Sidebar Navigation', () => {
 test.describe('Tactical View (default)', () => {
   test('scan sweep radar animation is present', async ({ page }) => {
     await page.goto('/');
+    await authenticate(page);
     // ScanSweep is rendered with aria-hidden
     const sweep = page.locator('[aria-hidden="true"]').first();
     await expect(sweep).toBeAttached();
@@ -197,6 +220,7 @@ test.describe('Empty Tactical State', () => {
 test.describe('Bottom Bar Adaptation', () => {
   test('welcome phase shows NEW MISSION button', async ({ page }) => {
     await page.goto('/');
+    await authenticate(page);
     // During welcome, bottom bar should show NEW MISSION
     await expect(page.getByText('NEW MISSION', { exact: true })).toBeVisible();
   });
@@ -248,6 +272,7 @@ test.describe('Project Creation Flow', () => {
   test('creating project shows toast and navigates to planning', async ({ page }) => {
     await page.goto('/');
     await dismissWelcome(page);
+    // dismissWelcome already calls authenticate
     // Create project
     await page.getByRole('button', { name: /NEW PROJECT/ }).click();
     await page.getByPlaceholder('Enter project designation...').fill('Test Project');
@@ -417,12 +442,14 @@ test.describe('Toast System', () => {
 test.describe('Responsive & Visual', () => {
   test('CRT scanline overlay is present', async ({ page }) => {
     await page.goto('/');
+    await authenticate(page);
     const overlays = page.locator('[aria-hidden="true"]');
     await expect(overlays.first()).toBeAttached();
   });
 
   test('connection status shows correct state', async ({ page }) => {
     await page.goto('/');
+    await authenticate(page);
     const statusText = page.getByText(/CONNECTED|CONNECTING|DISCONNECTED/);
     await expect(statusText).toBeVisible();
   });

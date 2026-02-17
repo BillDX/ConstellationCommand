@@ -18,6 +18,8 @@ export interface SessionInfo {
   elapsedMs: number;
 }
 
+const MAX_OUTPUT_BUFFER = 256 * 1024; // 256 KB scrollback buffer per session
+
 interface Session {
   pty: IPty;
   projectId: string;
@@ -27,6 +29,7 @@ interface Session {
   launchedAt: number;
   completedAt?: number;
   terminalClients: Set<WebSocket>;
+  outputBuffer: string;
 }
 
 // ── SessionManager ───────────────────────────────────────────────────────
@@ -74,6 +77,7 @@ export class SessionManager extends EventEmitter {
       status: 'launched',
       launchedAt: Date.now(),
       terminalClients: new Set(),
+      outputBuffer: '',
     };
 
     this.sessions.set(config.id, session);
@@ -93,11 +97,17 @@ export class SessionManager extends EventEmitter {
     // Track whether we've seen first output
     let firstOutput = true;
 
-    // Forward pty output → terminal WS clients + OutputParser
+    // Forward pty output → terminal WS clients + OutputParser + buffer
     ptyProcess.onData((data: string) => {
       if (firstOutput) {
         firstOutput = false;
         this.emitLog('info', config.id, config.projectId, 'SessionManager', `Agent ${config.id.slice(0, 8)} receiving stdout — Claude Code is running`);
+      }
+
+      // Buffer output for replay when new terminal clients connect
+      session.outputBuffer += data;
+      if (session.outputBuffer.length > MAX_OUTPUT_BUFFER) {
+        session.outputBuffer = session.outputBuffer.slice(-MAX_OUTPUT_BUFFER);
       }
 
       // Send raw data to all connected terminal WebSocket clients
@@ -132,7 +142,7 @@ export class SessionManager extends EventEmitter {
     // to let the CLI boot up
     if (config.task) {
       setTimeout(() => {
-        ptyProcess.write(config.task + '\n');
+        ptyProcess.write(config.task + '\r');
         this.emitLog('info', config.id, config.projectId, 'SessionManager', `Task sent to agent ${config.id.slice(0, 8)}`);
       }, 1000);
     }
@@ -197,6 +207,11 @@ export class SessionManager extends EventEmitter {
   addTerminalClient(agentId: string, ws: WebSocket): void {
     const session = this.sessions.get(agentId);
     if (!session) return;
+
+    // Replay buffered output so the client sees previous terminal history
+    if (session.outputBuffer.length > 0 && ws.readyState === 1) {
+      ws.send(session.outputBuffer);
+    }
 
     session.terminalClients.add(ws);
 

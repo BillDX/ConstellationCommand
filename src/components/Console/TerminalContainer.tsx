@@ -15,6 +15,7 @@ import '@xterm/xterm/css/xterm.css';
 interface TerminalContainerProps {
   agentId: string;
   sendMessage: (msg: any) => void;
+  authToken?: string | null;
 }
 
 /* ---------- xterm Theme ---------- */
@@ -44,7 +45,7 @@ const XTERM_THEME = {
   brightWhite: '#ffffff',
 };
 
-export default function TerminalContainer({ agentId, sendMessage }: TerminalContainerProps) {
+export default function TerminalContainer({ agentId, sendMessage, authToken }: TerminalContainerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -90,7 +91,8 @@ export default function TerminalContainer({ agentId, sendMessage }: TerminalCont
     /* ---------- WebSocket Connection with Retry ---------- */
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
-    const wsUrl = `${protocol}//${host}/ws/terminal/${agentId}`;
+    const tokenParam = authToken ? `?token=${encodeURIComponent(authToken)}` : '';
+    const wsUrl = `${protocol}//${host}/ws/terminal/${agentId}${tokenParam}`;
 
     terminal.writeln('\x1b[36m[CONNECTING]\x1b[0m Connecting to agent terminal...');
 
@@ -176,7 +178,7 @@ export default function TerminalContainer({ agentId, sendMessage }: TerminalCont
 
       fitAddonRef.current = null;
     };
-  }, [agentId, sendMessage]);
+  }, [agentId, sendMessage, authToken]);
 
   return (
     <div

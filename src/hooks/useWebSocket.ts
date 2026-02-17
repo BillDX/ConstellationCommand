@@ -18,7 +18,7 @@ export function registerTerminalCallback(id: string, cb: TerminalOutputCallback)
   };
 }
 
-export function useWebSocket() {
+export function useWebSocket(token: string | null) {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectDelayRef = useRef(1000);
@@ -202,6 +202,9 @@ export function useWebSocket() {
   }, [addEvent, updateAgent, addLog, addToast]);
 
   const connect = useCallback(() => {
+    // Don't connect without a token
+    if (!token) return;
+
     // Clean up any existing connection
     if (wsRef.current) {
       wsRef.current.close();
@@ -210,7 +213,7 @@ export function useWebSocket() {
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
-    const url = `${protocol}//${host}/ws/events`;
+    const url = `${protocol}//${host}/ws/events?token=${encodeURIComponent(token)}`;
 
     setConnectionStatus('connecting');
     const ws = new WebSocket(url);
@@ -254,10 +257,24 @@ export function useWebSocket() {
     ws.onerror = () => {
       // The onclose handler will fire after onerror, so reconnect logic is handled there
     };
-  }, [sendMessage, handleMessage]);
+  }, [token, sendMessage, handleMessage]);
 
   useEffect(() => {
-    connect();
+    // Clean up previous connection
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+
+    if (token) {
+      connect();
+    } else {
+      setConnectionStatus('disconnected');
+    }
 
     return () => {
       // Clean up on unmount
@@ -270,7 +287,7 @@ export function useWebSocket() {
         wsRef.current = null;
       }
     };
-  }, [connect]);
+  }, [token, connect]);
 
   return { sendMessage, connectionStatus };
 }

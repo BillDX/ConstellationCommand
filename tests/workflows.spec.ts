@@ -1,5 +1,19 @@
 import { test, expect } from '@playwright/test';
 
+// Authenticate if the login overlay is visible
+async function authenticate(page: import('@playwright/test').Page) {
+  const checkpoint = page.getByText('SECURITY CHECKPOINT');
+  try {
+    await checkpoint.waitFor({ state: 'visible', timeout: 3000 });
+    const passwordInput = page.locator('input[type="password"]');
+    await passwordInput.fill('test-password-e2e');
+    await page.getByText('AUTHENTICATE', { exact: true }).click();
+    await expect(checkpoint).not.toBeVisible({ timeout: 5000 });
+  } catch {
+    // Login overlay not present (already authenticated)
+  }
+}
+
 // Navigation has a 400ms warp-effect delay before the view switches
 async function navigateTo(page: import('@playwright/test').Page, label: string) {
   await page.getByText(label, { exact: true }).click();
@@ -18,6 +32,7 @@ async function closeConsoleIfOpen(page: import('@playwright/test').Page) {
 // Dismiss the welcome overlay if visible, ending on the incubator view
 async function goToIncubator(page: import('@playwright/test').Page) {
   await page.goto('/');
+  await authenticate(page);
   // Wait for initial state sync and any auto-open animations
   await page.waitForTimeout(1500);
   // Close any auto-opened agent console (from server state sync)
@@ -133,6 +148,7 @@ test.describe('Project State Sync', () => {
 
   test('WebSocket connection status shows CONNECTED', async ({ page }) => {
     await page.goto('/');
+    await authenticate(page);
     await expect(page.getByText('CONNECTED')).toBeVisible({ timeout: 5000 });
   });
 });
@@ -404,6 +420,7 @@ test.describe('Agent Communication Workflow', () => {
 test.describe('Welcome-to-Project Full Workflow', () => {
   test('complete flow from first load to planning with tasks', async ({ page }) => {
     await page.goto('/');
+    await authenticate(page);
     // Wait for state sync and close any auto-opened agent console
     await page.waitForTimeout(1500);
     await closeConsoleIfOpen(page);
