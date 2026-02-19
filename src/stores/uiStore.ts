@@ -9,6 +9,7 @@ interface UIState {
   consolePanelAgentId: string | null;
   showLaunchModal: boolean;
   showProjectDetail: boolean;
+  viewscreenAgentId: string | null;
 
   // Actions
   setView: (view: View) => void;
@@ -19,6 +20,8 @@ interface UIState {
   openLaunchModal: () => void;
   closeLaunchModal: () => void;
   toggleProjectDetail: () => void;
+  openChannel: (agentId: string) => void;
+  closeChannel: () => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -29,6 +32,7 @@ export const useUIStore = create<UIState>((set) => ({
   consolePanelAgentId: null,
   showLaunchModal: false,
   showProjectDetail: false,
+  viewscreenAgentId: null,
 
   setView: (view) =>
     set({ currentView: view }),
@@ -53,4 +57,10 @@ export const useUIStore = create<UIState>((set) => ({
 
   toggleProjectDetail: () =>
     set((state) => ({ showProjectDetail: !state.showProjectDetail })),
+
+  openChannel: (agentId) =>
+    set({ viewscreenAgentId: agentId }),
+
+  closeChannel: () =>
+    set({ viewscreenAgentId: null }),
 }));

@@ -5,7 +5,7 @@ import ScanlineOverlay from './components/Viewscreen/ScanlineOverlay';
 import Planet from './components/Viewscreen/Planet';
 import OrbitalField from './components/Viewscreen/OrbitalField';
 import HUD from './components/Viewscreen/HUD';
-import AgentConsole from './components/Console/AgentConsole';
+import ViewscreenTerminal from './components/Viewscreen/ViewscreenTerminal';
 import MissionPlanning from './components/Planning/MissionPlanning';
 import LaunchModal from './components/Planning/LaunchModal';
 import GalaxyMap from './components/Incubator/GalaxyMap';
@@ -40,9 +40,10 @@ const VIEW_SUBTITLES: Record<string, string> = {
 
 export default function App() {
   const {
-    currentView, sidebarCollapsed, showCRT, showConsolePanel, consolePanelAgentId,
-    showLaunchModal,
-    setView, toggleSidebar, openLaunchModal, closeLaunchModal, toggleProjectDetail, openConsole, closeConsole,
+    currentView, sidebarCollapsed, showCRT,
+    showLaunchModal, viewscreenAgentId,
+    setView, toggleSidebar, openLaunchModal, closeLaunchModal, toggleProjectDetail,
+    openChannel, closeChannel,
   } = useUIStore();
   const { projects, activeProjectId } = useProjectStore();
   const { agents } = useAgentStore();
@@ -75,9 +76,6 @@ export default function App() {
     return agentList.filter(a => a.projectId === activeProject.id);
   }, [agentList, activeProject]);
 
-  // Get selected agent for console panel
-  const selectedAgent = consolePanelAgentId ? agents[consolePanelAgentId] : null;
-
   // Compute flow phase whenever projects/agents change
   useEffect(() => {
     computePhase(Object.keys(projects).length, activeAgents.length, completedAgents.length);
@@ -93,10 +91,10 @@ export default function App() {
       setTransporterActive(true);
       setTransporterPos({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
 
-      // Auto-open console when only 1 active agent
+      // Auto-open channel on viewscreen when only 1 active agent
       if (activeAgents.length === 1) {
         setTimeout(() => {
-          openConsole(activeAgents[0].id);
+          openChannel(activeAgents[0].id);
         }, 1000);
       }
     }
@@ -127,7 +125,7 @@ export default function App() {
       }
       prevAgentStatusRef.current[agent.id] = agent.status;
     }
-  }, [agentList, activeAgents, openConsole, addToast]);
+  }, [agentList, activeAgents, openChannel, addToast]);
 
   // Auto-open create project modal when arriving at incubator from welcome
   const prevViewRef = useRef(currentView);
@@ -199,35 +197,76 @@ export default function App() {
       {/* Scan Sweep Radar — visible in tactical view */}
       {currentView === 'tactical' && <ScanSweep active />}
 
-      {/* Main Content - Tactical View */}
+      {/* Main Content - Tactical View (Split Layout) */}
       {currentView === 'tactical' && activeProject && (
-        <>
-          {/* Planet */}
+        <div style={{
+          position: 'fixed',
+          top: 48,
+          left: sidebarCollapsed ? 56 : 200,
+          right: 0,
+          bottom: 92,
+          display: 'flex',
+          zIndex: 10,
+          transition: 'left 0.3s ease',
+        }}>
+          {/* Left: Planet + Orbital Moons */}
           <div style={{
-            position: 'fixed',
-            inset: 0,
+            width: '35%',
+            minWidth: 280,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 10,
+            position: 'relative',
             pointerEvents: 'none',
           }}>
-            <div style={{ pointerEvents: 'auto' }}>
-              <Planet
-                name={activeProject.name}
-                health={activeProject.health}
-                progress={activeProject.progress}
-                onClick={toggleProjectDetail}
+            <div style={{
+              transform: 'scale(0.65)',
+              transformOrigin: 'center center',
+              position: 'relative',
+            }}>
+              <div style={{ pointerEvents: 'auto' }}>
+                <Planet
+                  name={activeProject.name}
+                  health={activeProject.health}
+                  progress={activeProject.progress}
+                  paletteIndex={activeProject.paletteIndex}
+                  onClick={toggleProjectDetail}
+                />
+              </div>
+            </div>
+            {/* Orbital moons scaled down and contained */}
+            <div style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'none',
+              transform: 'scale(0.55)',
+              transformOrigin: 'center center',
+            }}>
+              <OrbitalField
+                agents={projectAgents}
+                onMoonClick={(agentId) => openChannel(agentId)}
               />
             </div>
           </div>
 
-          {/* Orbital Moons */}
-          <OrbitalField
-            agents={projectAgents}
-            onMoonClick={(agentId) => openConsole(agentId)}
-          />
-        </>
+          {/* Right: Viewscreen Terminal */}
+          <div style={{
+            flex: 1,
+            padding: '12px 16px 12px 8px',
+            display: 'flex',
+            pointerEvents: 'auto',
+          }}>
+            <ViewscreenTerminal
+              agentId={viewscreenAgentId}
+              onCloseChannel={closeChannel}
+              sendMessage={sendMessage}
+              authToken={authToken}
+            />
+          </div>
+        </div>
       )}
 
       {/* Empty Tactical - no active project */}
@@ -261,7 +300,7 @@ export default function App() {
         onRedAlert={handleRedAlert}
         onHail={() => {
           const active = Object.values(agents).find(a => a.status === 'active');
-          if (active) openConsole(active.id);
+          if (active) openChannel(active.id);
         }}
         onScan={() => {
           sendMessage({ type: 'state:request' });
@@ -282,16 +321,6 @@ export default function App() {
 
       {/* Welcome Overlay */}
       {phase === 'welcome' && !welcomeSeen && <WelcomeOverlay />}
-
-      {/* Agent Console Panel */}
-      {showConsolePanel && consolePanelAgentId && selectedAgent && (
-        <AgentConsole
-          agentId={consolePanelAgentId}
-          onClose={closeConsole}
-          sendMessage={sendMessage}
-          authToken={authToken}
-        />
-      )}
 
       {/* Launch Agent Modal */}
       {showLaunchModal && (
