@@ -28,6 +28,7 @@ export interface Project {
   progress: number;
   agents: string[];
   createdAt: number;
+  paletteIndex: number;
 }
 
 export interface LogEntry {
@@ -48,7 +49,7 @@ export type WSClientMessage =
   | { type: 'terminal:resize'; agentId: string; cols: number; rows: number }
   | { type: 'agent:launch'; id: string; projectId: string; task: string; cwd: string }
   | { type: 'agent:kill'; agentId: string }
-  | { type: 'project:create'; id: string; name: string; description: string }
+  | { type: 'project:create'; id: string; name: string; description: string; paletteIndex: number }
   | { type: 'state:request' };
 
 // Server messages (unwrapped from payload wrapper in useWebSocket)

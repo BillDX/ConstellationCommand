@@ -19,6 +19,7 @@ export interface Project {
   cwd: string;
   status: 'active' | 'idle' | 'error';
   agents: string[];
+  paletteIndex: number;
 }
 
 // ── WebSocket messages: Client → Server ──────────────────────────────────
@@ -87,6 +88,7 @@ export interface ProjectCreateMessage {
     id: string;
     name: string;
     description: string;
+    paletteIndex: number;
   };
 }
 

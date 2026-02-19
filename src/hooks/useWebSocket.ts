@@ -48,7 +48,7 @@ export function useWebSocket(token: string | null) {
           wrapped = { type: 'terminal:resize', payload: { agentId: message.agentId, cols: message.cols, rows: message.rows } };
           break;
         case 'project:create':
-          wrapped = { type: 'project:create', payload: { id: message.id, name: message.name, description: message.description } };
+          wrapped = { type: 'project:create', payload: { id: message.id, name: message.name, description: message.description, paletteIndex: message.paletteIndex } };
           break;
         case 'state:request':
           wrapped = message; // No payload needed
@@ -163,6 +163,7 @@ export function useWebSocket(token: string | null) {
             progress: p.progress ?? 0,
             agents: p.agents || [],
             createdAt: p.createdAt || Date.now(),
+            paletteIndex: p.paletteIndex ?? 0,
           });
         }
 

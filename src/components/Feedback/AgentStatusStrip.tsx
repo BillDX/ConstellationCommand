@@ -4,7 +4,7 @@ import { useUIStore } from '../../stores/uiStore';
 
 export default function AgentStatusStrip() {
   const { agents } = useAgentStore();
-  const { openConsole } = useUIStore();
+  const { openChannel } = useUIStore();
   const agentList = Object.values(agents);
 
   if (agentList.length === 0) return null;
@@ -12,7 +12,7 @@ export default function AgentStatusStrip() {
   const statusColors: Record<string, string> = {
     active: 'var(--green-success, #00ff88)',
     launching: 'var(--amber-alert, #ff9f1c)',
-    completed: 'var(--cyan-glow, #00c8ff)',
+    completed: '#5a7a9a',
     error: 'var(--red-alert, #ff3344)',
     queued: 'var(--text-secondary, #7a8ba8)',
   };
@@ -22,7 +22,7 @@ export default function AgentStatusStrip() {
       {agentList.map(agent => (
         <button
           key={agent.id}
-          onClick={() => openConsole(agent.id)}
+          onClick={() => openChannel(agent.id)}
           style={stripStyles.indicator}
         >
           <span style={{

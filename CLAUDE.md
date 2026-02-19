@@ -1,102 +1,114 @@
 # ConstellationCommand
 
-A gamified sci-fi mission control interface that wraps around Claude Code CLI sessions, making software development feel like commanding a starship.
+Gamified sci-fi mission control interface wrapping Claude Code CLI sessions. Projects are planets, agents are orbiting moons, UI is a retro Star Trek bridge viewscreen.
 
-## Architecture
-- **Backend**: Node.js + Express + WebSocket server on a headless Debian box
-- **Frontend**: React + TypeScript SPA served by the backend, accessed via browser
-- **Terminal**: node-pty on server spawns Claude Code sessions; xterm.js on client renders them over WebSocket
-- **State**: Zustand on client, synced via WebSocket events from server
-- **Security**: Server-side path validation — all project directories auto-created under `~/.constellation-command/projects/`
+## Development Philosophy
 
-## Theme
-Vintage Star Trek / retro sci-fi tactical command interface. The user is a Starfleet-style commander. Projects are planets. Agents are orbiting moons. Everything looks like a starship bridge viewscreen.
+- **Incremental changes over sweeping rewrites.** Small, focused commits. Each commit does one thing.
+- **Test-driven.** Write or update tests before implementing features. Never skip tests to move faster.
+- **Minimal dependencies.** Do not add libraries without explicit approval. Justify any new dependency.
+- **Security-first.** Treat all user input as hostile. Never disable auth, validation, or path checks for convenience.
+- **Explicit over clever.** No magic or metaprogramming unless genuinely warranted.
 
-## Key Commands
-- `npm run dev` — Start both client (Vite HMR on :5173) and server (tsx watch on :3000)
-- `npm run build` — Build frontend for production into `dist/client/`
-- `npm start` — Run production server (serves built frontend + API on :3000)
-- `npm run test:e2e` — Run Playwright E2E test suite (64 tests)
+## Code Standards
+
+- TypeScript strict mode. Type all function signatures and component props.
+- Functions and components do one thing. If a description needs "and," split it.
+- Keep modules focused, imports clean. No circular dependencies.
+- No dead code, no commented-out blocks, no TODOs without linked issues.
+- Prefer the platform: native Node.js APIs, standard React patterns, Zustand conventions.
 
 ## Testing
-E2E tests use Playwright with system Chromium (`/usr/bin/chromium`). Test suites:
-- `tests/app.spec.ts` — Core UI tests (40 tests): layout, navigation, modals, views
-- `tests/workflows.spec.ts` — Workflow tests (24 tests): project lifecycle, planning, agent launch, communication, security
 
-**Prerequisites**: Production build must exist in `dist/client/` (`npm run build` first). The test config auto-starts the Express server on port 3000.
+Run the full test suite before every commit. Do not commit with failing tests.
 
-**Running tests**:
-- `npm run test:e2e` — Run all tests headless
-- `npx playwright test --headed` — Run with browser visible
-- `npx playwright test -g "Agent Communication"` — Run a specific test group
+**When fixing a bug, write a failing test first that reproduces it.**
 
-**Test coverage**:
-- Page load & core layout (title, starfield, branding, stardate/clock, connection status)
-- Welcome flow (overlay, BEGIN NEW MISSION)
-- HUD sidebar navigation (5 nav items, view switching, collapse/expand)
-- Tactical view (planet, scan sweep, action buttons, empty state)
-- Incubator view (galaxy map, NEW PROJECT button, CreateProjectModal)
-- Project creation (toast, planning navigation, directory preview, slug sanitization)
-- Planning view (mission planning panel, task input, adding tasks, Enter key, persistence)
-- Agent launch (modal fields, CWD read-only, auto-navigate, console auto-open, full context prompt)
-- Agent communication (terminal connection, task display, activity feed, terminate, close)
-- System logs (log viewer, filter buttons, search, agent launch log entries)
-- Test resilience (handles auto-opened consoles from server state between tests)
-- Status view (4-panel dashboard, system metrics)
-- Launch modal (open, fields, disabled/enabled state, Cancel, ESC)
-- Path security (no editable CWD in any modal)
-- Multi-project workflows
-- Full welcome-to-project lifecycle
+- **E2E tests** (Playwright, system Chromium at `/usr/bin/chromium`):
+  - `tests/app.spec.ts` — Core UI (40 tests): layout, navigation, modals, views
+  - `tests/workflows.spec.ts` — Workflows (24 tests): project lifecycle, planning, agent launch, communication
+  - `tests/auth.spec.ts` — Authentication
+- **Prerequisites**: `npm run build` first (production build in `dist/client/`). Test config auto-starts Express on :3000.
+- **Commands**:
+  - `npm run test:e2e` — All tests headless
+  - `npx playwright test --headed` — With browser visible
+  - `npx playwright test -g "pattern"` — Specific test group
+
+## Git Workflow
+
+- Commit early and often. Small, atomic commits with clear messages.
+- Imperative mood: `Add rate limiting to login endpoint`, not `Added rate limiting`.
+- Do not bundle unrelated changes in one commit.
+- Do not refactor unrelated code while implementing a feature.
+
+## When Making Changes
+
+1. Read the relevant code and tests. Understand current behavior first.
+2. Write or update tests for the desired behavior.
+3. Implement the smallest change that makes the tests pass.
+4. Run the full test suite (`npm run test:e2e`).
+5. Verify manually in the browser that the user flow works.
+6. Commit with a clear message.
+
+## What Not To Do
+
+- Do not add "nice to have" libraries or tools without discussion.
+- Do not skip browser testing because unit tests pass.
+- Do not make large, multi-concern pull requests.
+- Do not write to paths outside the project or dev environment.
+- Do not disable security features (path validation, auth, CSRF) for convenience.
+
+## Architecture
+
+- **Backend**: Node.js + Express + WebSocket (`ws`) on port 3000
+- **Frontend**: React 19 + TypeScript SPA (Vite on :5173 in dev, served by Express in prod)
+- **Terminal**: node-pty spawns Claude Code sessions server-side; xterm.js renders over WebSocket
+- **State**: Zustand stores on client, synced via WebSocket events from server
+- **Security**: Server-side path validation; all project dirs under `~/.constellation-command/projects/`
+
+## Key Commands
+
+- `npm run dev` — Client (Vite HMR :5173) + server (tsx watch :3000) concurrently
+- `npm run build` — Build frontend into `dist/client/`
+- `npm start` — Production server on :3000
+- `npm run test:e2e` — Playwright E2E suite
 
 ## File Structure
-- `server/` — Node.js backend (Express, WebSocket, pty management)
-  - `server/index.ts` — Main server, WebSocket routing, message dispatch
-  - `server/SessionManager.ts` — PTY lifecycle, agent session management
-  - `server/OutputParser.ts` — Regex-based event extraction from Claude stdout
-  - `server/pathSecurity.ts` — Path validation, directory creation, slug sanitization
-  - `server/FileWatcher.ts` — chokidar-based file system change watcher
-  - `server/GitMonitor.ts` — Git status polling
-  - `server/types.ts` — Server-side TypeScript types
-- `src/` — React frontend
-  - `src/components/Viewscreen/` — Main tactical display (starfield, planet, moons, HUD)
-  - `src/components/Console/` — Agent terminal panels (xterm.js, activity feed)
-  - `src/components/Incubator/` — Project galaxy map, CreateProjectModal
-  - `src/components/Planning/` — Mission briefing, task planning, LaunchModal
-  - `src/components/Logs/` — System log viewer
-  - `src/components/Status/` — Ship status dashboard
-  - `src/components/Welcome/` — First-run welcome overlay
-  - `src/components/Feedback/` — Toasts, agent status strip
-  - `src/stores/` — Zustand stores (project, agent, UI, flow, planning, log)
-  - `src/hooks/useWebSocket.ts` — WebSocket connection, message wrapping/unwrapping
-  - `src/utils/generateId.ts` — Secure-context-safe UUID generation
-  - `src/types.ts` — Client-side TypeScript types
+
+- `server/index.ts` — Express app, WebSocket routing, event broadcast
+- `server/SessionManager.ts` — PTY lifecycle, agent sessions
+- `server/OutputParser.ts` — Regex event extraction from Claude stdout
+- `server/pathSecurity.ts` — Path validation, slug sanitization
+- `server/FileWatcher.ts` — chokidar file system watcher
+- `server/GitMonitor.ts` — Git status polling
+- `src/components/Viewscreen/` — Tactical display (starfield, planet, moons, HUD, effects)
+- `src/components/Console/` — Agent terminal panels (xterm.js, activity feed)
+- `src/components/Planning/` — Mission briefing, task planning, LaunchModal
+- `src/components/Incubator/` — Galaxy map, CreateProjectModal
+- `src/components/Logs/` — System log viewer
+- `src/components/Status/` — Ship status dashboard
+- `src/stores/` — Zustand stores (project, agent, UI, auth, flow, planning, log)
+- `src/hooks/useWebSocket.ts` — WebSocket connection and message handling
 - `tests/` — Playwright E2E tests
 
 ## WebSocket Protocol
-Two WebSocket routes:
-- `/ws/events` — Event broadcast channel (state sync, agent status, file events, logs)
+
+- `/ws/events` — Broadcast channel (state sync, agent status, file events, logs)
 - `/ws/terminal/:agentId` — Raw terminal I/O for a specific agent session
 
 ## Claude Code Integration
-All Claude Code sessions are spawned with `--dangerously-skip-permissions` flag via node-pty. The `CLAUDECODE` environment variable is stripped before spawning to prevent "nested session" errors when the server itself runs inside a Claude Code session.
 
-**Full context prompts**: When an agent is launched (from either the Launch Modal or Mission Planning), the prompt sent to Claude Code includes the full project context:
-- Project name and description
-- All mission plan tasks (with completion status)
-- The specific task directive
+Sessions spawned via node-pty with `--dangerously-skip-permissions`. The `CLAUDECODE` env var is stripped to prevent nested-session errors.
 
-The task prompt is written to stdin after a 1-second boot delay. The OutputParser watches stdout for file creation, build events, errors, and completions, then emits structured events over WebSocket to the frontend. Lifecycle events (spawn, first output, task sent, exit) are broadcast as log entries to the System Logs view.
+**Prompt flow**: Launch sends full project context (name, description, all tasks with status, specific directive) to stdin after 1s boot delay. OutputParser watches stdout for file/build/error/completion events and broadcasts them over WebSocket.
 
 **Launch flows**:
-- **Launch Modal** (from tactical view bottom bar): Opens a modal for entering a task directive; sends full context prompt to Claude Code
-- **Mission Planning per-task LAUNCH**: Launches an agent for a single task from the mission plan
-- **BEGIN MISSION**: Launches agents for all uncompleted/unassigned tasks in the mission plan simultaneously
+- **Launch Modal** (tactical view) — Free-form task directive
+- **Per-task LAUNCH** (mission planning) — Single task from plan
+- **BEGIN MISSION** — All uncompleted tasks simultaneously
 
-All launch flows auto-navigate to the tactical view and auto-open the agent console.
+All launches auto-navigate to tactical view and auto-open agent console.
 
 ## Path Security
-All project directories are auto-created under `~/.constellation-command/projects/<slug>/`. The server:
-- Generates directory paths from project names (slugified, collision-avoided)
-- Validates all CWD parameters before PTY spawn, file watch, or git monitor
-- Blocks directory traversal attacks via `fs.realpath` + prefix check
-- No user-editable path fields exist in the UI
+
+All project directories auto-created under `~/.constellation-command/projects/<slug>/`. Server validates all CWD parameters via `fs.realpath` + prefix check before PTY spawn, file watch, or git monitor. No user-editable path fields exist in the UI.

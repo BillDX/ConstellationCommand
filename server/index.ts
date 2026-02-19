@@ -427,6 +427,7 @@ async function handleClientMessage(msg: ClientMessage): Promise<void> {
           cwd,
           status: 'active',
           agents: [],
+          paletteIndex: 0,
         };
       }
 
@@ -463,7 +464,7 @@ async function handleClientMessage(msg: ClientMessage): Promise<void> {
     }
 
     case 'project:create': {
-      const { id, name, description } = msg.payload;
+      const { id, name, description, paletteIndex } = msg.payload;
 
       // Server generates project directory — no user-provided path
       const projectCwd = await createProjectDirectory(name);
@@ -475,6 +476,7 @@ async function handleClientMessage(msg: ClientMessage): Promise<void> {
         cwd: projectCwd,
         status: 'active',
         agents: [],
+        paletteIndex: paletteIndex ?? 0,
       };
       // Start file watcher on the created directory
       fileWatcher.watch(id, projectCwd);

@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { useProjectStore } from '../../stores/projectStore';
 import type { Project } from '../../types';
+import { PLANET_THEMES } from '../Viewscreen/Planet';
 
 /* ============================================================
    GalaxyMap - Project Incubator / Galaxy Map View
@@ -174,7 +175,8 @@ interface StarNodeProps {
 
 function StarNode({ project, x, y, isHovered, onHover, onClick }: StarNodeProps) {
   const size = getStarSize(project.progress);
-  const color = getHealthColor(project.health);
+  const theme = PLANET_THEMES[project.paletteIndex % PLANET_THEMES.length];
+  const color = theme.highlight;
   const halfSize = size / 2;
 
   return (

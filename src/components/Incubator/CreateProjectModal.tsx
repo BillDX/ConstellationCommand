@@ -3,6 +3,7 @@ import { useProjectStore } from '../../stores/projectStore';
 import { useFlowStore } from '../../stores/flowStore';
 import { useUIStore } from '../../stores/uiStore';
 import { generateId } from '../../utils/generateId';
+import { PLANET_THEME_COUNT } from '../Viewscreen/Planet';
 
 /* ============================================================
    CreateProjectModal - New Project Creation Dialog
@@ -73,6 +74,7 @@ export default function CreateProjectModal({ onClose, sendMessage }: CreateProje
     if (!trimmedName) return;
 
     const projectId = generateId();
+    const paletteIndex = Math.floor(Math.random() * PLANET_THEME_COUNT);
 
     // Add project to local store immediately (cwd will be populated by state:sync from server)
     addProject({
@@ -85,6 +87,7 @@ export default function CreateProjectModal({ onClose, sendMessage }: CreateProje
       progress: 0,
       agents: [],
       createdAt: Date.now(),
+      paletteIndex,
     });
     setActiveProject(projectId);
 
@@ -94,6 +97,7 @@ export default function CreateProjectModal({ onClose, sendMessage }: CreateProje
       id: projectId,
       name: trimmedName,
       description: description.trim(),
+      paletteIndex,
     });
 
     // Toast notification

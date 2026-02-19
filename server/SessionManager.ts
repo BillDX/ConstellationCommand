@@ -139,10 +139,14 @@ export class SessionManager extends EventEmitter {
     });
 
     // If a task prompt was provided, write it to stdin after a short delay
-    // to let the CLI boot up
+    // to let the CLI boot up. The text and Enter keypress are sent separately
+    // so Claude Code processes the input before receiving the submit signal.
     if (config.task) {
       setTimeout(() => {
-        ptyProcess.write(config.task + '\r');
+        ptyProcess.write(config.task);
+        setTimeout(() => {
+          ptyProcess.write('\r');
+        }, 100);
         this.emitLog('info', config.id, config.projectId, 'SessionManager', `Task sent to agent ${config.id.slice(0, 8)}`);
       }, 1000);
     }

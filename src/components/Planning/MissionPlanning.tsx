@@ -27,7 +27,7 @@ function getAgentStatusColor(status: string): string {
     case 'launching':
       return 'var(--amber-alert, #ff9f1c)';
     case 'completed':
-      return 'var(--cyan-glow, #00c8ff)';
+      return '#5a7a9a';
     case 'error':
       return 'var(--red-alert, #ff3344)';
     default:

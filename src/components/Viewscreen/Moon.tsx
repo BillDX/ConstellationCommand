@@ -22,11 +22,11 @@ export interface MoonProps {
 /* ---------- Status Color Map ---------- */
 
 const STATUS_COLORS: Record<Agent['status'], string> = {
-  active: '#00c8ff',
-  completed: '#ffd700',
-  error: '#ff3344',
-  queued: '#4a5568',
-  launching: '#8b5cf6',
+  active: '#00ff88',      // vibrant green — actively working
+  completed: '#5a7a9a',   // muted steel blue — finished, faded
+  error: '#ff3344',       // red alert
+  queued: '#4a5568',      // dim gray — waiting in queue
+  launching: '#8b5cf6',   // purple — booting up
 };
 
 /* ---------- Helpers ---------- */
@@ -97,6 +97,32 @@ function ensureKeyframes(): void {
       }
     }
 
+    @keyframes moon-active-pulse {
+      0%, 100% {
+        box-shadow: 0 0 8px 3px rgba(0, 255, 136, 0.4),
+                    0 0 20px 8px rgba(0, 255, 136, 0.15);
+        transform: scale(1);
+      }
+      50% {
+        box-shadow: 0 0 14px 5px rgba(0, 255, 136, 0.6),
+                    0 0 30px 12px rgba(0, 255, 136, 0.25);
+        transform: scale(1.06);
+      }
+    }
+
+    @keyframes moon-error-flash {
+      0%, 100% {
+        box-shadow: 0 0 6px 2px rgba(255, 51, 68, 0.3),
+                    0 0 15px 5px rgba(255, 51, 68, 0.1);
+        opacity: 1;
+      }
+      50% {
+        box-shadow: 0 0 12px 4px rgba(255, 51, 68, 0.6),
+                    0 0 25px 10px rgba(255, 51, 68, 0.2);
+        opacity: 0.85;
+      }
+    }
+
     @keyframes moon-label-fade-in {
       from {
         opacity: 0;
@@ -126,6 +152,10 @@ export default function Moon({ agent, index, totalMoons, onClick }: MoonProps) {
   const startAngle = totalMoons > 0 ? (index / totalMoons) * 360 : 0;
 
   const isLaunching = agent.status === 'launching';
+  const isActive = agent.status === 'active';
+  const isCompleted = agent.status === 'completed';
+  const isError = agent.status === 'error';
+  const isFinished = isCompleted || isError;
 
   /* ---------- Styles ---------- */
 
@@ -158,20 +188,35 @@ export default function Moon({ agent, index, totalMoons, onClick }: MoonProps) {
     zIndex: 20 + index,
   };
 
+  /* Status-specific animation */
+  const statusAnimation = isActive
+    ? 'moon-active-pulse 2s ease-in-out infinite'
+    : isLaunching
+    ? 'pulse-glow-strong 1.5s ease-in-out infinite'
+    : isError
+    ? 'moon-error-flash 3s ease-in-out infinite'
+    : 'none';
+
+  /* Completed/queued moons are visually muted */
+  const glowIntensity = isFinished ? 0.3 : 1;
+
   /* The visible moon sphere */
   const moonBodyStyle: React.CSSProperties = {
     width: moonSize,
     height: moonSize,
     borderRadius: '50%',
-    background: `radial-gradient(ellipse at 35% 30%, ${color}cc 0%, ${color}88 40%, ${color}44 70%, ${color}22 100%)`,
+    background: isFinished
+      ? `radial-gradient(ellipse at 35% 30%, ${color}88 0%, ${color}55 40%, ${color}33 70%, ${color}18 100%)`
+      : `radial-gradient(ellipse at 35% 30%, ${color}cc 0%, ${color}88 40%, ${color}44 70%, ${color}22 100%)`,
     boxShadow: [
-      `0 0 ${moonSize * 0.4}px ${moonSize * 0.15}px ${color}55`,
-      `0 0 ${moonSize * 0.8}px ${moonSize * 0.3}px ${color}22`,
-      `inset -2px -3px ${moonSize * 0.3}px rgba(0, 0, 0, 0.4)`,
-      `inset 1px 2px ${moonSize * 0.15}px rgba(255, 255, 255, 0.1)`,
+      `0 0 ${moonSize * 0.4}px ${moonSize * 0.15 * glowIntensity}px ${color}${isFinished ? '33' : '55'}`,
+      `0 0 ${moonSize * 0.8}px ${moonSize * 0.3 * glowIntensity}px ${color}${isFinished ? '11' : '22'}`,
+      `inset -2px -3px ${moonSize * 0.3}px rgba(0, 0, 0, ${isFinished ? '0.6' : '0.4'})`,
+      `inset 1px 2px ${moonSize * 0.15}px rgba(255, 255, 255, ${isFinished ? '0.05' : '0.1'})`,
     ].join(', '),
     transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-    animation: isLaunching ? `pulse-glow-strong 1.5s ease-in-out infinite` : 'none',
+    animation: statusAnimation,
+    opacity: isFinished ? 0.6 : 1,
     position: 'relative',
   };
 
@@ -185,14 +230,15 @@ export default function Moon({ agent, index, totalMoons, onClick }: MoonProps) {
     fontSize: '10px',
     fontWeight: 500,
     letterSpacing: '0.5px',
-    color: `${color}cc`,
-    textShadow: `0 0 6px ${color}44`,
+    color: isFinished ? `${color}88` : `${color}cc`,
+    textShadow: isFinished ? 'none' : `0 0 6px ${color}44`,
     whiteSpace: 'nowrap',
     textAlign: 'center',
     maxWidth: 100,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     pointerEvents: 'none',
+    opacity: isFinished ? 0.5 : 1,
     animation: 'moon-label-fade-in 0.6s ease-out forwards',
   };
 
@@ -201,12 +247,13 @@ export default function Moon({ agent, index, totalMoons, onClick }: MoonProps) {
     position: 'absolute',
     top: -2,
     right: -2,
-    width: 6,
-    height: 6,
+    width: isActive ? 8 : 6,
+    height: isActive ? 8 : 6,
     borderRadius: '50%',
     backgroundColor: color,
-    boxShadow: `0 0 4px ${color}`,
+    boxShadow: isActive ? `0 0 6px ${color}, 0 0 12px ${color}88` : `0 0 4px ${color}`,
     border: '1px solid rgba(10, 14, 23, 0.8)',
+    opacity: isFinished ? 0.5 : 1,
   };
 
   return (
