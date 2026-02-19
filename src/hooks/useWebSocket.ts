@@ -61,7 +61,8 @@ export function useWebSocket(token: string | null) {
   }, []);
 
   // Map server status values to client status values
-  type AgentStatus = 'queued' | 'launching' | 'active' | 'completed' | 'error';
+  // Most server statuses pass through directly; 'launched' → 'launching', 'running' → 'active'
+  type AgentStatus = 'queued' | 'launching' | 'active' | 'thinking' | 'coding' | 'executing' | 'scanning' | 'downloading' | 'building' | 'testing' | 'waiting' | 'paused' | 'completed' | 'error';
   const statusMap: Record<string, string> = { launched: 'launching', running: 'active' };
   const mapStatus = (status: string): AgentStatus => (statusMap[status] || status) as AgentStatus;
 
@@ -163,7 +164,7 @@ export function useWebSocket(token: string | null) {
             progress: p.progress ?? 0,
             agents: p.agents || [],
             createdAt: p.createdAt || Date.now(),
-            paletteIndex: p.paletteIndex ?? 0,
+            paletteIndex: p.paletteIndex ?? (p.id ? Math.abs([...p.id].reduce((h: number, c: string) => ((h << 5) - h) + c.charCodeAt(0), 0)) % 8 : 0),
           });
         }
 

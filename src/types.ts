@@ -3,7 +3,21 @@ export interface Agent {
   projectId: string;
   task: string;
   cwd: string;
-  status: 'queued' | 'launching' | 'active' | 'completed' | 'error';
+  status:
+    | 'queued'        // Not yet started
+    | 'launching'     // CLI booting up
+    | 'active'        // General working state
+    | 'thinking'      // Reasoning / planning
+    | 'coding'        // Writing or editing files
+    | 'executing'     // Running shell commands
+    | 'scanning'      // Reading / searching files
+    | 'downloading'   // Fetching from web
+    | 'building'      // Compiling / bundling
+    | 'testing'       // Running test suites
+    | 'waiting'       // Awaiting user input
+    | 'paused'        // Disconnected / reconnecting
+    | 'completed'     // Finished successfully
+    | 'error';        // Exited with error
   launchedAt: number;
   completedAt?: number;
   filesChanged: number;

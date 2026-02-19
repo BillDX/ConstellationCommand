@@ -22,16 +22,20 @@ interface ViewscreenTerminalProps {
 
 function getStatusInfo(status: string): { label: string; color: string } {
   switch (status) {
-    case 'active':
-      return { label: 'ACTIVE', color: 'var(--green-success, #00ff88)' };
-    case 'launching':
-      return { label: 'LAUNCHING', color: 'var(--amber-alert, #ff9f1c)' };
-    case 'completed':
-      return { label: 'COMPLETED', color: '#5a7a9a' };
-    case 'error':
-      return { label: 'ERROR', color: 'var(--red-alert, #ff3344)' };
-    default:
-      return { label: status.toUpperCase(), color: 'var(--text-secondary, #7a8ba8)' };
+    case 'active':      return { label: 'WORKING',        color: '#00ff88' };
+    case 'thinking':    return { label: 'THINKING',       color: '#6366f1' };
+    case 'coding':      return { label: 'CODING',         color: '#10b981' };
+    case 'executing':   return { label: 'EXECUTING',      color: '#00c8ff' };
+    case 'scanning':    return { label: 'SCANNING',       color: '#14b8a6' };
+    case 'downloading': return { label: 'DOWNLOADING',    color: '#38bdf8' };
+    case 'building':    return { label: 'BUILDING',       color: '#f59e0b' };
+    case 'testing':     return { label: 'TESTING',        color: '#84cc16' };
+    case 'waiting':     return { label: 'AWAITING INPUT', color: '#ff9f1c' };
+    case 'paused':      return { label: 'PAUSED',         color: '#64748b' };
+    case 'launching':   return { label: 'LAUNCHING',      color: '#8b5cf6' };
+    case 'completed':   return { label: 'COMPLETED',      color: '#5a7a9a' };
+    case 'error':       return { label: 'ERROR',          color: '#ff3344' };
+    default:            return { label: status.toUpperCase(), color: '#7a8ba8' };
   }
 }
 

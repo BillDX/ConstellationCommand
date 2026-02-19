@@ -41,6 +41,21 @@ export class SessionManager extends EventEmitter {
   constructor() {
     super();
     this.outputParser = new OutputParser();
+
+    // Listen for activity state changes from the output parser.
+    // The parser detects specific Claude Code activities (thinking, coding,
+    // executing, scanning, etc.) and emits state transitions.
+    this.outputParser.on('agent:activity', ({ agentId, state }: { agentId: string; state: AgentStatus }) => {
+      const session = this.sessions.get(agentId);
+      if (!session) return;
+      // Don't override terminal states
+      if (session.status === 'completed' || session.status === 'error') return;
+
+      if (session.status !== state) {
+        session.status = state;
+        this.emitStatus(agentId, state);
+      }
+    });
   }
 
   /**
@@ -94,14 +109,30 @@ export class SessionManager extends EventEmitter {
       }
     }, 500);
 
-    // Track whether we've seen first output
+    // Track whether we've seen first output and whether task has been sent
     let firstOutput = true;
+    let taskSent = false;
 
     // Forward pty output → terminal WS clients + OutputParser + buffer
     ptyProcess.onData((data: string) => {
       if (firstOutput) {
         firstOutput = false;
         this.emitLog('info', config.id, config.projectId, 'SessionManager', `Agent ${config.id.slice(0, 8)} receiving stdout — Claude Code is running`);
+
+        // Now that Claude Code is producing output, it's safe to send the task.
+        // Wait a moment for the prompt to fully render, then send text + Enter.
+        if (config.task && !taskSent) {
+          taskSent = true;
+          setTimeout(() => {
+            ptyProcess.write(config.task);
+            // Longer gap before Enter to ensure Claude Code's input handler
+            // has fully processed the pasted text
+            setTimeout(() => {
+              ptyProcess.write('\r');
+              this.emitLog('info', config.id, config.projectId, 'SessionManager', `Task submitted to agent ${config.id.slice(0, 8)}`);
+            }, 300);
+          }, 500);
+        }
       }
 
       // Buffer output for replay when new terminal clients connect
@@ -138,17 +169,20 @@ export class SessionManager extends EventEmitter {
       this.outputParser.clearBuffer(config.id);
     });
 
-    // If a task prompt was provided, write it to stdin after a short delay
-    // to let the CLI boot up. The text and Enter keypress are sent separately
-    // so Claude Code processes the input before receiving the submit signal.
+    // Fallback: if no output arrives within 5 seconds, send the task anyway.
+    // This handles edge cases where Claude Code might be waiting for input
+    // before producing any output.
     if (config.task) {
       setTimeout(() => {
-        ptyProcess.write(config.task);
-        setTimeout(() => {
-          ptyProcess.write('\r');
-        }, 100);
-        this.emitLog('info', config.id, config.projectId, 'SessionManager', `Task sent to agent ${config.id.slice(0, 8)}`);
-      }, 1000);
+        if (!taskSent) {
+          taskSent = true;
+          this.emitLog('info', config.id, config.projectId, 'SessionManager', `Fallback: sending task to agent ${config.id.slice(0, 8)} (no output detected)`);
+          ptyProcess.write(config.task);
+          setTimeout(() => {
+            ptyProcess.write('\r');
+          }, 300);
+        }
+      }, 5000);
     }
   }
 

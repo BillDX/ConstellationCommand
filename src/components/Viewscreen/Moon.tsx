@@ -22,11 +22,20 @@ export interface MoonProps {
 /* ---------- Status Color Map ---------- */
 
 const STATUS_COLORS: Record<Agent['status'], string> = {
-  active: '#00ff88',      // vibrant green — actively working
-  completed: '#5a7a9a',   // muted steel blue — finished, faded
-  error: '#ff3344',       // red alert
-  queued: '#4a5568',      // dim gray — waiting in queue
-  launching: '#8b5cf6',   // purple — booting up
+  active: '#00ff88',      // vibrant green — general active
+  thinking: '#6366f1',    // indigo — neural processing
+  coding: '#10b981',      // emerald — writing code
+  executing: '#00c8ff',   // cyan — running commands
+  scanning: '#14b8a6',    // teal — sensor sweep / reading
+  downloading: '#38bdf8', // sky blue — data transfer
+  building: '#f59e0b',    // gold — construction
+  testing: '#84cc16',     // lime — diagnostics
+  waiting: '#ff9f1c',     // amber — standby / awaiting input
+  paused: '#64748b',      // slate — systems on hold
+  completed: '#5a7a9a',   // muted steel — mission complete
+  error: '#ff3344',       // red — alert
+  queued: '#4a5568',      // dim gray — in queue
+  launching: '#8b5cf6',   // purple — warp engines initializing
 };
 
 /* ---------- Helpers ---------- */
@@ -110,6 +119,132 @@ function ensureKeyframes(): void {
       }
     }
 
+    @keyframes moon-waiting-pulse {
+      0%, 100% {
+        box-shadow: 0 0 8px 3px rgba(255, 159, 28, 0.3),
+                    0 0 20px 8px rgba(255, 159, 28, 0.1);
+        transform: scale(1);
+      }
+      50% {
+        box-shadow: 0 0 12px 4px rgba(255, 159, 28, 0.5),
+                    0 0 25px 10px rgba(255, 159, 28, 0.2);
+        transform: scale(1.03);
+      }
+    }
+
+    @keyframes moon-thinking-pulse {
+      0%, 100% {
+        box-shadow: 0 0 10px 4px rgba(99, 102, 241, 0.4),
+                    0 0 25px 10px rgba(99, 102, 241, 0.15);
+        transform: scale(1);
+      }
+      50% {
+        box-shadow: 0 0 18px 7px rgba(99, 102, 241, 0.7),
+                    0 0 40px 15px rgba(99, 102, 241, 0.3);
+        transform: scale(1.08);
+      }
+    }
+
+    @keyframes moon-coding-pulse {
+      0%, 100% {
+        box-shadow: 0 0 8px 3px rgba(16, 185, 129, 0.4),
+                    0 0 20px 8px rgba(16, 185, 129, 0.15);
+        transform: scale(1);
+      }
+      50% {
+        box-shadow: 0 0 14px 5px rgba(16, 185, 129, 0.65),
+                    0 0 30px 12px rgba(16, 185, 129, 0.25);
+        transform: scale(1.05);
+      }
+    }
+
+    @keyframes moon-executing-pulse {
+      0%, 100% {
+        box-shadow: 0 0 8px 3px rgba(0, 200, 255, 0.4),
+                    0 0 18px 8px rgba(0, 200, 255, 0.15);
+        transform: scale(1);
+      }
+      33% {
+        box-shadow: 0 0 14px 5px rgba(0, 200, 255, 0.7),
+                    0 0 25px 12px rgba(0, 200, 255, 0.3);
+        transform: scale(1.04);
+      }
+      66% {
+        box-shadow: 0 0 10px 4px rgba(0, 200, 255, 0.5),
+                    0 0 20px 9px rgba(0, 200, 255, 0.2);
+        transform: scale(1.02);
+      }
+    }
+
+    @keyframes moon-scanning-pulse {
+      0%, 100% {
+        box-shadow: 0 0 8px 3px rgba(20, 184, 166, 0.35),
+                    0 0 22px 9px rgba(20, 184, 166, 0.12);
+        transform: scale(1);
+        filter: brightness(1);
+      }
+      50% {
+        box-shadow: 0 0 16px 6px rgba(20, 184, 166, 0.6),
+                    0 0 35px 14px rgba(20, 184, 166, 0.25);
+        transform: scale(1.06);
+        filter: brightness(1.15);
+      }
+    }
+
+    @keyframes moon-downloading-pulse {
+      0% {
+        box-shadow: 0 0 6px 2px rgba(56, 189, 248, 0.3),
+                    0 0 16px 6px rgba(56, 189, 248, 0.1);
+        transform: scale(1);
+      }
+      50% {
+        box-shadow: 0 0 12px 5px rgba(56, 189, 248, 0.6),
+                    0 0 28px 11px rgba(56, 189, 248, 0.25);
+        transform: scale(1.04);
+      }
+      100% {
+        box-shadow: 0 0 6px 2px rgba(56, 189, 248, 0.3),
+                    0 0 16px 6px rgba(56, 189, 248, 0.1);
+        transform: scale(1);
+      }
+    }
+
+    @keyframes moon-building-pulse {
+      0%, 100% {
+        box-shadow: 0 0 8px 3px rgba(245, 158, 11, 0.35),
+                    0 0 20px 8px rgba(245, 158, 11, 0.12);
+        transform: scale(1);
+      }
+      25% {
+        box-shadow: 0 0 12px 5px rgba(245, 158, 11, 0.55),
+                    0 0 28px 11px rgba(245, 158, 11, 0.2);
+        transform: scale(1.04);
+      }
+      75% {
+        box-shadow: 0 0 14px 6px rgba(245, 158, 11, 0.6),
+                    0 0 30px 12px rgba(245, 158, 11, 0.25);
+        transform: scale(1.06);
+      }
+    }
+
+    @keyframes moon-testing-pulse {
+      0%, 100% {
+        box-shadow: 0 0 8px 3px rgba(132, 204, 22, 0.35),
+                    0 0 18px 7px rgba(132, 204, 22, 0.12);
+        transform: scale(1);
+      }
+      30% {
+        box-shadow: 0 0 14px 5px rgba(132, 204, 22, 0.6),
+                    0 0 28px 11px rgba(132, 204, 22, 0.25);
+        transform: scale(1.05);
+      }
+      60% {
+        box-shadow: 0 0 10px 4px rgba(132, 204, 22, 0.4),
+                    0 0 22px 9px rgba(132, 204, 22, 0.15);
+        transform: scale(1.02);
+      }
+    }
+
     @keyframes moon-error-flash {
       0%, 100% {
         box-shadow: 0 0 6px 2px rgba(255, 51, 68, 0.3),
@@ -151,11 +286,14 @@ export default function Moon({ agent, index, totalMoons, onClick }: MoonProps) {
   /* Distribute moons evenly around the orbit at their starting angle */
   const startAngle = totalMoons > 0 ? (index / totalMoons) * 360 : 0;
 
-  const isLaunching = agent.status === 'launching';
-  const isActive = agent.status === 'active';
-  const isCompleted = agent.status === 'completed';
-  const isError = agent.status === 'error';
-  const isFinished = isCompleted || isError;
+  const s = agent.status;
+  const isLaunching = s === 'launching';
+  const isWorking = s === 'active' || s === 'thinking' || s === 'coding' || s === 'executing' || s === 'scanning' || s === 'downloading' || s === 'building' || s === 'testing';
+  const isWaiting = s === 'waiting';
+  const isPaused = s === 'paused';
+  const isCompleted = s === 'completed';
+  const isError = s === 'error';
+  const isFinished = isCompleted || isError || isPaused;
 
   /* ---------- Styles ---------- */
 
@@ -188,14 +326,20 @@ export default function Moon({ agent, index, totalMoons, onClick }: MoonProps) {
     zIndex: 20 + index,
   };
 
-  /* Status-specific animation */
-  const statusAnimation = isActive
-    ? 'moon-active-pulse 2s ease-in-out infinite'
-    : isLaunching
-    ? 'pulse-glow-strong 1.5s ease-in-out infinite'
-    : isError
-    ? 'moon-error-flash 3s ease-in-out infinite'
-    : 'none';
+  /* Status-specific animation — each state gets a distinct visual rhythm */
+  const statusAnimation =
+    s === 'thinking'     ? 'moon-thinking-pulse 2.5s ease-in-out infinite' :
+    s === 'coding'       ? 'moon-coding-pulse 1.8s ease-in-out infinite' :
+    s === 'executing'    ? 'moon-executing-pulse 1.2s ease-in-out infinite' :
+    s === 'scanning'     ? 'moon-scanning-pulse 2s ease-in-out infinite' :
+    s === 'downloading'  ? 'moon-downloading-pulse 1.5s ease-in-out infinite' :
+    s === 'building'     ? 'moon-building-pulse 2s ease-in-out infinite' :
+    s === 'testing'      ? 'moon-testing-pulse 1.6s ease-in-out infinite' :
+    isWorking            ? 'moon-active-pulse 2s ease-in-out infinite' :
+    isWaiting            ? 'moon-waiting-pulse 3s ease-in-out infinite' :
+    isLaunching          ? 'pulse-glow-strong 1.5s ease-in-out infinite' :
+    isError              ? 'moon-error-flash 3s ease-in-out infinite' :
+    'none';
 
   /* Completed/queued moons are visually muted */
   const glowIntensity = isFinished ? 0.3 : 1;
@@ -247,11 +391,11 @@ export default function Moon({ agent, index, totalMoons, onClick }: MoonProps) {
     position: 'absolute',
     top: -2,
     right: -2,
-    width: isActive ? 8 : 6,
-    height: isActive ? 8 : 6,
+    width: isWorking ? 8 : 6,
+    height: isWorking ? 8 : 6,
     borderRadius: '50%',
     backgroundColor: color,
-    boxShadow: isActive ? `0 0 6px ${color}, 0 0 12px ${color}88` : `0 0 4px ${color}`,
+    boxShadow: isWorking ? `0 0 6px ${color}, 0 0 12px ${color}88` : `0 0 4px ${color}`,
     border: '1px solid rgba(10, 14, 23, 0.8)',
     opacity: isFinished ? 0.5 : 1,
   };

@@ -427,7 +427,7 @@ async function handleClientMessage(msg: ClientMessage): Promise<void> {
           cwd,
           status: 'active',
           agents: [],
-          paletteIndex: 0,
+          paletteIndex: Math.abs([...projectId].reduce((h, c) => ((h << 5) - h) + c.charCodeAt(0), 0)) % 8,
         };
       }
 

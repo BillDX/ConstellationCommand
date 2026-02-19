@@ -21,18 +21,14 @@ interface MissionPlanningProps {
 /* ---------- Status Color Helper ---------- */
 
 function getAgentStatusColor(status: string): string {
-  switch (status) {
-    case 'active':
-      return 'var(--green-success, #00ff88)';
-    case 'launching':
-      return 'var(--amber-alert, #ff9f1c)';
-    case 'completed':
-      return '#5a7a9a';
-    case 'error':
-      return 'var(--red-alert, #ff3344)';
-    default:
-      return 'var(--text-secondary, #7a8ba8)';
-  }
+  const colors: Record<string, string> = {
+    active: '#00ff88', thinking: '#6366f1', coding: '#10b981',
+    executing: '#00c8ff', scanning: '#14b8a6', downloading: '#38bdf8',
+    building: '#f59e0b', testing: '#84cc16', waiting: '#ff9f1c',
+    paused: '#64748b', launching: '#8b5cf6', completed: '#5a7a9a',
+    error: '#ff3344',
+  };
+  return colors[status] || '#7a8ba8';
 }
 
 /* ==========================================================

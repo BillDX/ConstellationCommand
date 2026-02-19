@@ -10,11 +10,20 @@ export default function AgentStatusStrip() {
   if (agentList.length === 0) return null;
 
   const statusColors: Record<string, string> = {
-    active: 'var(--green-success, #00ff88)',
-    launching: 'var(--amber-alert, #ff9f1c)',
+    active: '#00ff88',
+    thinking: '#6366f1',
+    coding: '#10b981',
+    executing: '#00c8ff',
+    scanning: '#14b8a6',
+    downloading: '#38bdf8',
+    building: '#f59e0b',
+    testing: '#84cc16',
+    waiting: '#ff9f1c',
+    paused: '#64748b',
+    launching: '#8b5cf6',
     completed: '#5a7a9a',
-    error: 'var(--red-alert, #ff3344)',
-    queued: 'var(--text-secondary, #7a8ba8)',
+    error: '#ff3344',
+    queued: '#7a8ba8',
   };
 
   return (

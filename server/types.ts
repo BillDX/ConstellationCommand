@@ -1,6 +1,19 @@
 // ── Agent & Project domain types ──────────────────────────────────────────
 
-export type AgentStatus = 'launched' | 'running' | 'completed' | 'error';
+export type AgentStatus =
+  | 'launched'      // PTY spawned, CLI booting
+  | 'running'       // General active state (fallback)
+  | 'thinking'      // "Thinking..." — reasoning phase
+  | 'coding'        // Writing/editing files
+  | 'executing'     // Running bash/shell commands
+  | 'scanning'      // Reading files, searching, grepping
+  | 'downloading'   // Web fetch / web search
+  | 'building'      // npm/compile/build operations
+  | 'testing'       // Running tests
+  | 'waiting'       // Awaiting user input (turn complete)
+  | 'paused'        // Disconnected / reconnecting
+  | 'completed'     // PTY exited successfully
+  | 'error';        // PTY exited with error
 
 export interface Agent {
   id: string;
