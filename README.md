@@ -8,7 +8,7 @@ Turn your software development workflow into a starship command experience. Proj
 
 ```bash
 # Clone and install
-git clone https://github.com/YOUR_USERNAME/ConstellationCommand.git
+git clone https://github.com/BillDX/ConstellationCommand.git
 cd ConstellationCommand
 npm install
 
@@ -23,6 +23,39 @@ npm start
 ```
 
 For a detailed walkthrough, see the **[Getting Started Guide](docs/GETTING_STARTED.md)**.
+
+## Versions
+
+### v0.1.0 — Core Feature Set (2026-02-19)
+
+Stable milestone with the full foundational feature set in place.
+
+**What's included:**
+- LCARS viewscreen terminal with Star Trek bridge UI
+- Planet palette system with deterministic color assignment per project
+- Granular agent status detection (13 states: thinking, coding, executing, scanning, downloading, building, testing, waiting, paused, etc.)
+- Activity-specific moon animations and colors
+- Agent auto-submit via output-driven PTY task injection
+- Password authentication with scrypt hashing
+- WebSocket-based real-time state sync
+- PTY-backed Claude Code CLI sessions with xterm.js rendering
+
+**To restore this version:**
+```bash
+# Check out the tag (read-only detached HEAD)
+git checkout v0.1.0
+
+# Or create a branch from it to work from
+git branch restore-point v0.1.0 && git checkout restore-point
+
+# Or reset current branch back to it (destructive — discards later commits)
+git reset --hard v0.1.0
+
+# Compare current work against this milestone
+git diff v0.1.0
+```
+
+---
 
 ## Features
 
