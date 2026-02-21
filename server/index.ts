@@ -7,9 +7,11 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { SessionManager } from './SessionManager.js';
 import { FileWatcher } from './FileWatcher.js';
 import { GitMonitor } from './GitMonitor.js';
+import { Orchestrator } from './Orchestrator.js';
 import { authManager, securityHeaders } from './auth.js';
 import type {
   Agent,
+  AgentRole,
   Project,
   ClientMessage,
   ServerMessage,
@@ -143,6 +145,7 @@ const agents: Record<string, Agent> = {};
 const sessionManager = new SessionManager();
 const fileWatcher = new FileWatcher();
 const gitMonitor = new GitMonitor();
+const orchestrator = new Orchestrator(sessionManager);
 
 // ── WebSocket server (noServer mode — we handle upgrade ourselves) ──────
 
@@ -187,6 +190,43 @@ function buildStateSync(): StateSyncMessage {
     type: 'state:sync',
     payload: { projects, agents, baseDir: getBaseDirectory() },
   };
+}
+
+// ── Helper: register an agent in state and launch it ─────────────────────
+
+function registerAndLaunchAgent(config: {
+  id: string;
+  projectId: string;
+  task: string;
+  cwd: string;
+  role: AgentRole;
+  planTaskId?: string;
+  branch?: string;
+}): void {
+  const { id, projectId, task, cwd, role, planTaskId, branch } = config;
+
+  agents[id] = {
+    id,
+    projectId,
+    task: role === 'manual' ? task : `[${role.toUpperCase()}] ${task.slice(0, 100)}...`,
+    cwd,
+    status: 'launched',
+    role,
+    launchedAt: Date.now(),
+    ...(planTaskId && { planTaskId }),
+    ...(branch && { branch }),
+  };
+
+  if (projects[projectId]) {
+    projects[projectId].agents.push(id);
+  }
+
+  const roleLabel = role === 'manual' ? '' : ` (${role})`;
+  broadcastLog('info', 'AgentManager', `Agent ${id.slice(0, 8)}${roleLabel} launched for project "${projects[projectId]?.name}"`, id, projectId);
+  sessionManager.launchAgent({ id, projectId, task, cwd, role });
+
+  // Broadcast updated state so clients see the new agent immediately
+  broadcast(buildStateSync());
 }
 
 // ── Wire up service events → broadcast ──────────────────────────────────
@@ -242,6 +282,115 @@ sessionManager.outputParser.on('parsed', (evt) => {
     });
   }
 });
+
+// ── Feed raw agent output to orchestrator ────────────────────────────────
+
+sessionManager.on('agent:output', (data: { agentId: string; data: string }) => {
+  orchestrator.feedAgentOutput(data.agentId, data.data);
+});
+
+sessionManager.on('agent:exit', (data: { agentId: string; exitCode: number }) => {
+  orchestrator.onAgentComplete(data.agentId, data.exitCode);
+});
+
+// ── Wire up orchestrator events → broadcast ──────────────────────────────
+
+orchestrator.on('phase', (data: { projectId: string; phase: string; timestamp: number }) => {
+  // Update project orchestration state
+  if (projects[data.projectId]?.orchestration) {
+    projects[data.projectId].orchestration!.phase = data.phase as any;
+  }
+
+  broadcastLog('info', 'Orchestrator', `Phase → ${data.phase.toUpperCase()}`, undefined, data.projectId);
+
+  broadcast({
+    type: 'orchestration:phase',
+    payload: {
+      projectId: data.projectId,
+      phase: data.phase as any,
+      timestamp: data.timestamp,
+    },
+  });
+});
+
+orchestrator.on('plan-ready', (data: { projectId: string; tasks: any[]; timestamp: number }) => {
+  // Store plan in project state
+  if (projects[data.projectId]?.orchestration) {
+    projects[data.projectId].orchestration!.plan = data.tasks;
+  }
+
+  broadcastLog('success', 'Orchestrator', `Plan ready with ${data.tasks.length} tasks`, undefined, data.projectId);
+
+  broadcast({
+    type: 'orchestration:plan-ready',
+    payload: {
+      projectId: data.projectId,
+      tasks: data.tasks,
+      timestamp: data.timestamp,
+    },
+  });
+});
+
+orchestrator.on('task-update', (data) => {
+  broadcast({
+    type: 'orchestration:task-update',
+    payload: {
+      projectId: data.projectId,
+      taskId: data.taskId,
+      status: data.status,
+      assignedAgent: data.assignedAgent,
+      branch: data.branch,
+      timestamp: data.timestamp,
+    },
+  });
+});
+
+orchestrator.on('worker-spawned', (data) => {
+  broadcast({
+    type: 'orchestration:worker-spawned',
+    payload: {
+      projectId: data.projectId,
+      agentId: data.agentId,
+      taskId: data.taskId,
+      branch: data.branch,
+      timestamp: data.timestamp,
+    },
+  });
+});
+
+orchestrator.on('merge-result', (data) => {
+  broadcast({
+    type: 'orchestration:merge-result',
+    payload: {
+      projectId: data.projectId,
+      branch: data.branch,
+      taskId: data.taskId,
+      success: data.success,
+      message: data.message,
+      timestamp: data.timestamp,
+    },
+  });
+});
+
+orchestrator.on('log', (data: { level: string; source: string; message: string; projectId: string; agentId?: string }) => {
+  broadcastLog(data.level as LogEntry['level'], data.source, data.message, data.agentId, data.projectId);
+});
+
+// The orchestrator emits 'agent-launch' when it needs to spawn agents
+// (coordinator, workers, merger). We handle the actual launch here.
+orchestrator.on('agent-launch', (config: {
+  id: string;
+  projectId: string;
+  task: string;
+  cwd: string;
+  role: AgentRole;
+  planTaskId?: string;
+  branch?: string;
+}) => {
+  registerAndLaunchAgent(config);
+});
+
+// ── File watcher + git monitor events ────────────────────────────────────
 
 fileWatcher.on('fs:change', (data) => {
   broadcast({
@@ -370,21 +519,7 @@ async function handleClientMessage(msg: ClientMessage): Promise<void> {
         break;
       }
 
-      // Register agent in state
-      agents[id] = {
-        id,
-        projectId,
-        task,
-        cwd,
-        status: 'launched',
-        launchedAt: Date.now(),
-      };
-
-      // Add agent to project
-      projects[projectId].agents.push(id);
-
-      broadcastLog('info', 'AgentManager', `Agent ${id.slice(0, 8)} launched for project "${projects[projectId].name}"`, id, projectId);
-      sessionManager.launchAgent({ id, projectId, task, cwd });
+      registerAndLaunchAgent({ id, projectId, task, cwd, role: 'manual' });
       break;
     }
 
@@ -482,6 +617,64 @@ async function handleClientMessage(msg: ClientMessage): Promise<void> {
       fileWatcher.watch(id, projectCwd);
       broadcastLog('success', 'ProjectManager', `Project "${name}" created at ${projectCwd}`, undefined, id);
       // Broadcast updated state
+      broadcast(buildStateSync());
+      break;
+    }
+
+    // ── Orchestration messages ──────────────────────────────────────────
+
+    case 'orchestration:start': {
+      const { projectId, maxConcurrentWorkers } = msg.payload;
+
+      const project = projects[projectId];
+      if (!project) {
+        broadcast({
+          type: 'validation:error',
+          payload: { message: `Project "${projectId}" not found`, context: 'orchestration:start' },
+        });
+        break;
+      }
+
+      try {
+        const orch = await orchestrator.startOrchestration(project, maxConcurrentWorkers);
+        project.orchestration = orch;
+        orchestrator.setProjectCwd(projectId, project.cwd);
+        orchestrator.setProjectState(projectId, project);
+        broadcast(buildStateSync());
+      } catch (err) {
+        broadcastLog('error', 'Orchestrator', `Failed to start orchestration: ${err}`, undefined, projectId);
+        broadcast({
+          type: 'validation:error',
+          payload: { message: String(err), context: 'orchestration:start' },
+        });
+      }
+      break;
+    }
+
+    case 'orchestration:approve-plan': {
+      const { projectId } = msg.payload;
+
+      const project = projects[projectId];
+      if (!project) break;
+
+      try {
+        orchestrator.setProjectState(projectId, project);
+        await orchestrator.approvePlan(projectId, project);
+        broadcast(buildStateSync());
+      } catch (err) {
+        broadcastLog('error', 'Orchestrator', `Failed to approve plan: ${err}`, undefined, projectId);
+      }
+      break;
+    }
+
+    case 'orchestration:abort': {
+      const { projectId } = msg.payload;
+
+      const project = projects[projectId];
+      if (!project) break;
+
+      await orchestrator.abortOrchestration(projectId, project.cwd);
+      delete project.orchestration;
       broadcast(buildStateSync());
       break;
     }

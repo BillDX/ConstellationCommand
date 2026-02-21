@@ -3,7 +3,7 @@ import * as pty from 'node-pty';
 import type { IPty } from 'node-pty';
 import type WebSocket from 'ws';
 import { OutputParser } from './OutputParser.js';
-import type { AgentStatus } from './types.js';
+import type { AgentStatus, AgentRole } from './types.js';
 
 // ── Session metadata ─────────────────────────────────────────────────────
 
@@ -13,6 +13,7 @@ export interface SessionInfo {
   task: string;
   cwd: string;
   status: AgentStatus;
+  role: AgentRole;
   launchedAt: number;
   completedAt?: number;
   elapsedMs: number;
@@ -26,6 +27,7 @@ interface Session {
   task: string;
   cwd: string;
   status: AgentStatus;
+  role: AgentRole;
   launchedAt: number;
   completedAt?: number;
   terminalClients: Set<WebSocket>;
@@ -66,6 +68,7 @@ export class SessionManager extends EventEmitter {
     projectId: string;
     task: string;
     cwd: string;
+    role?: AgentRole;
   }): void {
     if (this.sessions.has(config.id)) {
       throw new Error(`Agent ${config.id} is already running`);
@@ -90,6 +93,7 @@ export class SessionManager extends EventEmitter {
       task: config.task,
       cwd: config.cwd,
       status: 'launched',
+      role: config.role ?? 'manual',
       launchedAt: Date.now(),
       terminalClients: new Set(),
       outputBuffer: '',
@@ -150,6 +154,9 @@ export class SessionManager extends EventEmitter {
 
       // Feed the output parser
       this.outputParser.parse(config.id, data);
+
+      // Feed raw output to orchestration listeners (for plan/completion detection)
+      this.emit('agent:output', { agentId: config.id, data });
     });
 
     // Handle pty exit
@@ -164,6 +171,9 @@ export class SessionManager extends EventEmitter {
         config.id, config.projectId, 'SessionManager',
         `Agent ${config.id.slice(0, 8)} exited with code ${exitCode}`
       );
+
+      // Notify orchestration listeners about agent completion
+      this.emit('agent:exit', { agentId: config.id, exitCode });
 
       // Clean up parser buffer
       this.outputParser.clearBuffer(config.id);
@@ -229,6 +239,7 @@ export class SessionManager extends EventEmitter {
         task: session.task,
         cwd: session.cwd,
         status: session.status,
+        role: session.role,
         launchedAt: session.launchedAt,
         completedAt: session.completedAt,
         elapsedMs: (session.completedAt ?? now) - session.launchedAt,
