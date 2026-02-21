@@ -20,19 +20,22 @@ Gamified sci-fi mission control interface wrapping Claude Code CLI sessions. Pro
 
 ## Testing
 
-Run the full test suite before every commit. Do not commit with failing tests.
+Run the smoke test suite before every commit. Run the full suite before merging. Do not commit with failing tests.
 
 **When fixing a bug, write a failing test first that reproduces it.**
 
 - **E2E tests** (Playwright, system Chromium at `/usr/bin/chromium`):
-  - `tests/app.spec.ts` — Core UI (40 tests): layout, navigation, modals, views
-  - `tests/workflows.spec.ts` — Workflows (24 tests): project lifecycle, planning, agent launch, communication
+  - `tests/smoke.spec.ts` — Fast smoke suite (12 tests, ~1.5 min): critical paths, no real CLI sessions
+  - `tests/app.spec.ts` — Core UI: layout, navigation, modals, views
+  - `tests/workflows.spec.ts` — Workflows: project lifecycle, planning, agent launch, communication
   - `tests/auth.spec.ts` — Authentication
 - **Prerequisites**: `npm run build` first (production build in `dist/client/`). Test config auto-starts Express on :3000.
 - **Commands**:
-  - `npm run test:e2e` — All tests headless
+  - `npm run test:smoke` — Fast smoke suite (~1.5 min, run after every change)
+  - `npm run test:e2e` — Full suite (all test files, run before merging)
   - `npx playwright test --headed` — With browser visible
   - `npx playwright test -g "pattern"` — Specific test group
+- **Chrome DevTools MCP**: Configured in `.mcp.json` for visual debugging with headless Chromium. Agents can take screenshots, inspect DOM, check console errors, and profile performance on the running app.
 
 ## Git Workflow
 
@@ -46,9 +49,10 @@ Run the full test suite before every commit. Do not commit with failing tests.
 1. Read the relevant code and tests. Understand current behavior first.
 2. Write or update tests for the desired behavior.
 3. Implement the smallest change that makes the tests pass.
-4. Run the full test suite (`npm run test:e2e`).
+4. Run `npm run test:smoke` (fast validation).
 5. Verify manually in the browser that the user flow works.
 6. Commit with a clear message.
+7. Run `npm run test:e2e` before merging to main.
 
 ## What Not To Do
 
@@ -65,36 +69,61 @@ Run the full test suite before every commit. Do not commit with failing tests.
 - **Terminal**: node-pty spawns Claude Code sessions server-side; xterm.js renders over WebSocket
 - **State**: Zustand stores on client, synced via WebSocket events from server
 - **Security**: Server-side path validation; all project dirs under `~/.constellation-command/projects/`
+- **Orchestration**: Multi-agent coordination pipeline (coordinator → plan → workers in git worktrees → merger)
 
 ## Key Commands
 
 - `npm run dev` — Client (Vite HMR :5173) + server (tsx watch :3000) concurrently
 - `npm run build` — Build frontend into `dist/client/`
 - `npm start` — Production server on :3000
-- `npm run test:e2e` — Playwright E2E suite
+- `npm run test:smoke` — Fast smoke suite (~1.5 min)
+- `npm run test:e2e` — Full Playwright E2E suite
+- `./start-team.sh` — Launch full Claude agent team in tmux
+- `./start-team.sh --core` — Launch only specialist + frontend agents
+- `./start-team.sh --kill` — Kill existing tmux team session
 
 ## File Structure
 
 - `server/index.ts` — Express app, WebSocket routing, event broadcast
 - `server/SessionManager.ts` — PTY lifecycle, agent sessions
 - `server/OutputParser.ts` — Regex event extraction from Claude stdout
+- `server/Orchestrator.ts` — Multi-agent orchestration pipeline
+- `server/AgentPrompts.ts` — Prompt templates for orchestrated agents
+- `server/WorktreeManager.ts` — Git worktree creation/cleanup
 - `server/pathSecurity.ts` — Path validation, slug sanitization
 - `server/FileWatcher.ts` — chokidar file system watcher
 - `server/GitMonitor.ts` — Git status polling
+- `server/auth.ts` — Password authentication
+- `server/types.ts` — Server-side type definitions
 - `src/components/Viewscreen/` — Tactical display (starfield, planet, moons, HUD, effects)
 - `src/components/Console/` — Agent terminal panels (xterm.js, activity feed)
-- `src/components/Planning/` — Mission briefing, task planning, LaunchModal
+- `src/components/Planning/` — Mission briefing, task planning, LaunchModal, orchestration UI
 - `src/components/Incubator/` — Galaxy map, CreateProjectModal
 - `src/components/Logs/` — System log viewer
 - `src/components/Status/` — Ship status dashboard
-- `src/stores/` — Zustand stores (project, agent, UI, auth, flow, planning, log)
+- `src/stores/` — Zustand stores (project, agent, UI, auth, flow, planning, log, orchestration)
 - `src/hooks/useWebSocket.ts` — WebSocket connection and message handling
-- `tests/` — Playwright E2E tests
+- `src/types.ts` — Shared TypeScript types (Agent, Project, AgentRole, OrchestrationPhase, PlanTask)
+- `tests/` — Playwright E2E tests (smoke, app, workflows, auth)
+- `.claude/agents/` — Claude agent team profiles
+- `.mcp.json` — MCP server configuration (Chrome DevTools)
 
 ## WebSocket Protocol
 
-- `/ws/events` — Broadcast channel (state sync, agent status, file events, logs)
+- `/ws/events` — Broadcast channel (state sync, agent status, file events, logs, orchestration)
 - `/ws/terminal/:agentId` — Raw terminal I/O for a specific agent session
+
+### Orchestration Messages (Client → Server)
+- `orchestration:start` — Begin autonomous orchestration for a project
+- `orchestration:approve-plan` — Approve the coordinator's generated plan
+- `orchestration:abort` — Abort orchestration
+
+### Orchestration Messages (Server → Client)
+- `orchestration:phase` — Phase transition (initializing → planning → reviewing → executing → completing → completed | error)
+- `orchestration:plan-ready` — Coordinator generated a plan, ready for review
+- `orchestration:task-update` — Worker task status change
+- `orchestration:worker-spawned` — New worker agent created with git worktree
+- `orchestration:merge-result` — Merger agent branch merge result
 
 ## Claude Code Integration
 
@@ -105,9 +134,22 @@ Sessions spawned via node-pty with `--dangerously-skip-permissions`. The `CLAUDE
 **Launch flows**:
 - **Launch Modal** (tactical view) — Free-form task directive
 - **Per-task LAUNCH** (mission planning) — Single task from plan
-- **BEGIN MISSION** — All uncompleted tasks simultaneously
+- **BEGIN MISSION** — All uncompleted tasks simultaneously (manual, one agent per task)
+- **INITIATE MISSION** — Autonomous orchestration (coordinator plans, workers execute in worktrees, merger combines)
 
 All launches auto-navigate to tactical view and auto-open agent console.
+
+## Agent Team
+
+Team profiles in `.claude/agents/`. Launch with `./start-team.sh`.
+
+| Agent | Model | Role | Ownership |
+|-------|-------|------|-----------|
+| claude-specialist | opus | Backend coordinator | server/, terminal client, vite.config.ts |
+| frontend-effects | sonnet | UI/visual design | src/components/, stores/, hooks/, types.ts |
+| qa-integration | sonnet | Testing & QA | tests/, playwright.config.ts |
+| security | sonnet | Security review (read-only) | Reviews server/, auth, WebSocket |
+| docs | haiku | Documentation | README.md, CLAUDE.md, docs/ |
 
 ## Path Security
 
