@@ -93,6 +93,7 @@ export default function LaunchModal({ onClose, sendMessage }: LaunchModalProps) 
       projectId,
       task: trimmedTask,
       cwd,
+      role: 'manual',
       status: 'launching',
       launchedAt: Date.now(),
       filesChanged: 0,

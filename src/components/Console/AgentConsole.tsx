@@ -167,6 +167,27 @@ export default function AgentConsole({ agentId, onClose, sendMessage, authToken 
               <div style={styles.agentName}>
                 <span style={styles.agentIdLabel}>AGENT</span>
                 <span style={styles.agentIdValue}>{agentId.slice(0, 8).toUpperCase()}</span>
+                {agent?.role && agent.role !== 'manual' && (
+                  <span style={{
+                    fontFamily: "var(--font-display, 'Orbitron', sans-serif)",
+                    fontSize: '8px',
+                    fontWeight: 700,
+                    letterSpacing: '1.5px',
+                    padding: '2px 8px',
+                    borderRadius: 2,
+                    color: agent.role === 'coordinator' ? '#8b5cf6'
+                      : agent.role === 'merger' ? '#f59e0b'
+                      : '#00c8ff',
+                    border: `1px solid ${agent.role === 'coordinator' ? 'rgba(139, 92, 246, 0.4)'
+                      : agent.role === 'merger' ? 'rgba(245, 158, 11, 0.4)'
+                      : 'rgba(0, 200, 255, 0.4)'}`,
+                    background: agent.role === 'coordinator' ? 'rgba(139, 92, 246, 0.1)'
+                      : agent.role === 'merger' ? 'rgba(245, 158, 11, 0.1)'
+                      : 'rgba(0, 200, 255, 0.1)',
+                  }}>
+                    {agent.role.toUpperCase()}
+                  </span>
+                )}
               </div>
               <div style={styles.taskText}>{agentTask}</div>
             </div>

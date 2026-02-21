@@ -1,8 +1,11 @@
+export type AgentRole = 'manual' | 'coordinator' | 'worker' | 'merger';
+
 export interface Agent {
   id: string;
   projectId: string;
   task: string;
   cwd: string;
+  role: AgentRole;
   status:
     | 'queued'        // Not yet started
     | 'launching'     // CLI booting up
@@ -22,6 +25,10 @@ export interface Agent {
   completedAt?: number;
   filesChanged: number;
   events: AgentEvent[];
+  /** For workers: the plan task ID this agent is executing */
+  planTaskId?: string;
+  /** For workers: the git branch this agent works on */
+  branch?: string;
 }
 
 export interface AgentEvent {
@@ -55,6 +62,26 @@ export interface LogEntry {
   timestamp: number;
 }
 
+export type OrchestrationPhase =
+  | 'initializing'  // Coordinator spawning
+  | 'planning'      // Coordinator generating plan
+  | 'reviewing'     // Plan ready, awaiting user approval
+  | 'executing'     // Workers active
+  | 'completing'    // All tasks done, final merges
+  | 'completed'     // Project finished
+  | 'error';        // Orchestration failed
+
+export interface PlanTask {
+  id: string;
+  title: string;
+  description: string;
+  status: 'pending' | 'assigned' | 'in-progress' | 'completed' | 'failed';
+  assignedAgent: string | null;
+  branch: string | null;
+  order: number;
+  dependencies: string[];
+}
+
 export type View = 'tactical' | 'incubator' | 'planning' | 'logs' | 'status';
 
 // WebSocket message types (flat client-facing API; useWebSocket wraps for server)
@@ -64,7 +91,10 @@ export type WSClientMessage =
   | { type: 'agent:launch'; id: string; projectId: string; task: string; cwd: string }
   | { type: 'agent:kill'; agentId: string }
   | { type: 'project:create'; id: string; name: string; description: string; paletteIndex: number }
-  | { type: 'state:request' };
+  | { type: 'state:request' }
+  | { type: 'orchestration:start'; projectId: string; maxConcurrentWorkers?: number }
+  | { type: 'orchestration:approve-plan'; projectId: string }
+  | { type: 'orchestration:abort'; projectId: string };
 
 // Server messages (unwrapped from payload wrapper in useWebSocket)
 export type WSServerMessage =
@@ -80,4 +110,9 @@ export type WSServerMessage =
   | { type: 'task:completed'; agentId: string; timestamp: number }
   | { type: 'git:status'; projectId: string; changes: any[]; diffStat: string; timestamp: number }
   | { type: 'validation:error'; message: string; context: string }
-  | { type: 'log'; entry: LogEntry };
+  | { type: 'log'; entry: LogEntry }
+  | { type: 'orchestration:phase'; projectId: string; phase: OrchestrationPhase; timestamp: number }
+  | { type: 'orchestration:plan-ready'; projectId: string; tasks: PlanTask[]; timestamp: number }
+  | { type: 'orchestration:task-update'; projectId: string; taskId: string; status: PlanTask['status']; assignedAgent: string | null; branch: string | null; timestamp: number }
+  | { type: 'orchestration:worker-spawned'; projectId: string; agentId: string; taskId: string; branch: string; timestamp: number }
+  | { type: 'orchestration:merge-result'; projectId: string; branch: string; taskId: string; success: boolean; message: string; timestamp: number };

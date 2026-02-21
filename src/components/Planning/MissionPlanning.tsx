@@ -2,6 +2,7 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { useProjectStore } from '../../stores/projectStore';
 import { useAgentStore } from '../../stores/agentStore';
 import { usePlanningStore } from '../../stores/planningStore';
+import { useOrchestrationStore } from '../../stores/orchestrationStore';
 import { useUIStore } from '../../stores/uiStore';
 import { generateId } from '../../utils/generateId';
 
@@ -40,8 +41,10 @@ export default function MissionPlanning({ sendMessage, onWarp }: MissionPlanning
   const { agents } = useAgentStore();
   const { setView } = useUIStore();
   const planningStore = usePlanningStore();
+  const { orchestrations } = useOrchestrationStore();
 
   const activeProject = activeProjectId ? projects[activeProjectId] : null;
+  const orchestration = activeProjectId ? orchestrations[activeProjectId] ?? null : null;
 
   const tasks = activeProjectId ? planningStore.getProjectTasks(activeProjectId) : [];
   const [newTaskText, setNewTaskText] = useState('');
@@ -137,6 +140,7 @@ export default function MissionPlanning({ sendMessage, onWarp }: MissionPlanning
         projectId: activeProject.id,
         task: task.text,
         cwd: activeProject.cwd,
+        role: 'manual',
         status: 'launching',
         launchedAt: Date.now(),
         filesChanged: 0,
@@ -176,6 +180,7 @@ export default function MissionPlanning({ sendMessage, onWarp }: MissionPlanning
         projectId: activeProject.id,
         task: task.text,
         cwd: activeProject.cwd,
+        role: 'manual',
         status: 'launching',
         launchedAt: Date.now(),
         filesChanged: 0,
@@ -203,8 +208,44 @@ export default function MissionPlanning({ sendMessage, onWarp }: MissionPlanning
     }, 1000);
   }, [activeProject, activeProjectId, tasks, sendMessage, planningStore, buildPrompt, onWarp, setView]);
 
+  /* ---------- Initiate Orchestrated Mission ---------- */
+  const handleInitiateMission = useCallback(() => {
+    if (!activeProjectId) return;
+    useOrchestrationStore.getState().startOrchestration(activeProjectId);
+    sendMessage({
+      type: 'orchestration:start',
+      projectId: activeProjectId,
+      maxConcurrentWorkers: 3,
+    });
+  }, [activeProjectId, sendMessage]);
+
+  /* ---------- Approve Orchestrated Plan ---------- */
+  const handleApprovePlan = useCallback(() => {
+    if (!activeProjectId) return;
+    sendMessage({
+      type: 'orchestration:approve-plan',
+      projectId: activeProjectId,
+    });
+    // Navigate to tactical to watch the workers
+    if (onWarp) onWarp();
+    setTimeout(() => {
+      setView('tactical');
+    }, 1000);
+  }, [activeProjectId, sendMessage, onWarp, setView]);
+
+  /* ---------- Abort Orchestration ---------- */
+  const handleAbortOrchestration = useCallback(() => {
+    if (!activeProjectId) return;
+    sendMessage({
+      type: 'orchestration:abort',
+      projectId: activeProjectId,
+    });
+    useOrchestrationStore.getState().clearOrchestration(activeProjectId);
+  }, [activeProjectId, sendMessage]);
+
   /* ---------- Counts ---------- */
   const unlaunchedCount = tasks.filter((t) => !t.completed && !t.agentId).length;
+  const isOrchestrating = orchestration !== null && orchestration.phase !== 'completed' && orchestration.phase !== 'error';
 
   return (
     <div style={styles.container}>
@@ -262,20 +303,208 @@ export default function MissionPlanning({ sendMessage, onWarp }: MissionPlanning
           </div>
         </section>
 
-        {/* ========== MISSION PLAN ========== */}
+        {/* ========== ORCHESTRATION STATUS ========== */}
+        {orchestration && (
+          <section style={styles.section}>
+            <div style={styles.sectionHeaderBar}>
+              <div style={styles.sectionHeaderDecorLeft} />
+              <span style={styles.sectionLabel}>AUTONOMOUS ORCHESTRATION</span>
+              <div style={styles.sectionHeaderDecorRight} />
+            </div>
+
+            <div style={styles.orchStatusPanel}>
+              {/* Phase indicator */}
+              <div style={styles.orchPhaseRow}>
+                <span style={styles.orchPhaseLabel}>PHASE</span>
+                <span style={{
+                  ...styles.orchPhaseBadge,
+                  color: orchestration.phase === 'completed' ? '#00ff88'
+                    : orchestration.phase === 'error' ? '#ff3344'
+                    : orchestration.phase === 'reviewing' ? '#ff9f1c'
+                    : orchestration.phase === 'executing' ? '#00c8ff'
+                    : '#8b5cf6',
+                  borderColor: orchestration.phase === 'completed' ? 'rgba(0, 255, 136, 0.4)'
+                    : orchestration.phase === 'error' ? 'rgba(255, 51, 68, 0.4)'
+                    : orchestration.phase === 'reviewing' ? 'rgba(255, 159, 28, 0.4)'
+                    : orchestration.phase === 'executing' ? 'rgba(0, 200, 255, 0.4)'
+                    : 'rgba(139, 92, 246, 0.4)',
+                  background: orchestration.phase === 'completed' ? 'rgba(0, 255, 136, 0.08)'
+                    : orchestration.phase === 'error' ? 'rgba(255, 51, 68, 0.08)'
+                    : orchestration.phase === 'reviewing' ? 'rgba(255, 159, 28, 0.08)'
+                    : orchestration.phase === 'executing' ? 'rgba(0, 200, 255, 0.08)'
+                    : 'rgba(139, 92, 246, 0.08)',
+                }}>
+                  {orchestration.phase === 'initializing' && '\u25CB INITIALIZING'}
+                  {orchestration.phase === 'planning' && '\u25CF COORDINATOR PLANNING...'}
+                  {orchestration.phase === 'reviewing' && '\u25C9 PLAN READY \u2014 REVIEW BELOW'}
+                  {orchestration.phase === 'executing' && '\u25B6 WORKERS ACTIVE'}
+                  {orchestration.phase === 'completing' && '\u25B6 COMPLETING'}
+                  {orchestration.phase === 'completed' && '\u2713 MISSION COMPLETE'}
+                  {orchestration.phase === 'error' && '\u2717 ERROR'}
+                </span>
+
+                {/* Abort button */}
+                {isOrchestrating && (
+                  <button
+                    onClick={handleAbortOrchestration}
+                    onMouseEnter={() => setHoveredButton('abort-orch')}
+                    onMouseLeave={() => setHoveredButton(null)}
+                    style={{
+                      ...styles.orchAbortButton,
+                      boxShadow: hoveredButton === 'abort-orch'
+                        ? '0 0 12px rgba(255, 51, 68, 0.5)'
+                        : '0 0 4px rgba(255, 51, 68, 0.2)',
+                      background: hoveredButton === 'abort-orch'
+                        ? 'rgba(255, 51, 68, 0.12)'
+                        : 'rgba(255, 51, 68, 0.04)',
+                    }}
+                  >
+                    ABORT
+                  </button>
+                )}
+              </div>
+
+              {/* Progress bar during execution */}
+              {(orchestration.phase === 'executing' || orchestration.phase === 'completing' || orchestration.phase === 'completed') && orchestration.plan.length > 0 && (
+                <div style={styles.orchProgressContainer}>
+                  <div style={styles.orchProgressTrack}>
+                    <div style={{
+                      ...styles.orchProgressFill,
+                      width: `${(orchestration.plan.filter(t => t.status === 'completed').length / orchestration.plan.length) * 100}%`,
+                    }} />
+                  </div>
+                  <span style={styles.orchProgressText}>
+                    {orchestration.plan.filter(t => t.status === 'completed').length} / {orchestration.plan.length} tasks
+                  </span>
+                </div>
+              )}
+
+              {/* Auto-generated plan (during reviewing) */}
+              {orchestration.plan.length > 0 && (
+                <div style={styles.orchPlanList}>
+                  {orchestration.plan.map((task, idx) => {
+                    const taskAgent = task.assignedAgent ? agents[task.assignedAgent] : null;
+                    return (
+                      <div key={task.id} style={{
+                        ...styles.orchPlanTask,
+                        borderLeft: task.status === 'completed' ? '2px solid #00ff88'
+                          : task.status === 'failed' ? '2px solid #ff3344'
+                          : task.status === 'in-progress' ? '2px solid #00c8ff'
+                          : task.status === 'assigned' ? '2px solid #ff9f1c'
+                          : '2px solid rgba(0, 200, 255, 0.15)',
+                        background: idx % 2 === 0 ? 'rgba(0, 0, 0, 0.15)' : 'transparent',
+                      }}>
+                        <span style={styles.taskNumber}>{String(idx + 1).padStart(2, '0')}</span>
+                        <span style={{
+                          ...styles.orchTaskStatus,
+                          color: task.status === 'completed' ? '#00ff88'
+                            : task.status === 'failed' ? '#ff3344'
+                            : task.status === 'in-progress' ? '#00c8ff'
+                            : task.status === 'assigned' ? '#ff9f1c'
+                            : '#7a8ba8',
+                        }}>
+                          {task.status === 'completed' ? '\u2713'
+                            : task.status === 'failed' ? '\u2717'
+                            : task.status === 'in-progress' ? '\u25B6'
+                            : task.status === 'assigned' ? '\u25CB'
+                            : '\u25CB'}
+                        </span>
+                        <div style={styles.orchTaskInfo}>
+                          <span style={styles.orchTaskTitle}>{task.title}</span>
+                          <span style={styles.orchTaskDesc}>{task.description}</span>
+                        </div>
+                        {taskAgent && (
+                          <span style={styles.taskAgentBadge}>
+                            <span style={{
+                              ...styles.taskAgentDot,
+                              backgroundColor: getAgentStatusColor(taskAgent.status),
+                              boxShadow: `0 0 4px ${getAgentStatusColor(taskAgent.status)}`,
+                            }} />
+                            <span style={styles.taskAgentLabel}>
+                              {taskAgent.id.slice(0, 6).toUpperCase()}
+                            </span>
+                          </span>
+                        )}
+                        {task.branch && (
+                          <span style={styles.orchBranchBadge}>{task.branch}</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Approve / Reject for reviewing phase */}
+              {orchestration.phase === 'reviewing' && (
+                <div style={styles.orchApprovalRow}>
+                  <button
+                    onClick={handleAbortOrchestration}
+                    onMouseEnter={() => setHoveredButton('reject-plan')}
+                    onMouseLeave={() => setHoveredButton(null)}
+                    style={{
+                      ...styles.cancelButton,
+                      background: hoveredButton === 'reject-plan'
+                        ? 'rgba(255, 51, 68, 0.08)'
+                        : 'transparent',
+                      borderColor: hoveredButton === 'reject-plan'
+                        ? 'rgba(255, 51, 68, 0.4)'
+                        : 'rgba(122, 139, 168, 0.3)',
+                      color: hoveredButton === 'reject-plan'
+                        ? '#ff3344'
+                        : 'var(--text-secondary, #7a8ba8)',
+                    }}
+                  >
+                    REJECT PLAN
+                  </button>
+                  <button
+                    onClick={handleApprovePlan}
+                    onMouseEnter={() => setHoveredButton('approve-plan')}
+                    onMouseLeave={() => setHoveredButton(null)}
+                    style={{
+                      ...styles.beginMissionButton,
+                      boxShadow: hoveredButton === 'approve-plan'
+                        ? '0 0 25px rgba(0, 255, 136, 0.6), 0 0 50px rgba(0, 255, 136, 0.2), inset 0 0 20px rgba(0, 255, 136, 0.1)'
+                        : '0 0 15px rgba(0, 255, 136, 0.3), inset 0 0 10px rgba(0, 255, 136, 0.05)',
+                      borderColor: '#00ff88',
+                      color: '#00ff88',
+                      textShadow: '0 0 12px rgba(0, 255, 136, 0.5)',
+                      transform: hoveredButton === 'approve-plan' ? 'scale(1.02)' : 'scale(1)',
+                    }}
+                  >
+                    <span style={styles.beginMissionIcon}>{'\u2713'}</span>
+                    <span style={styles.beginMissionLabel}>APPROVE &amp; DEPLOY</span>
+                    <span style={styles.beginMissionCount}>
+                      {orchestration.plan.length} TASK{orchestration.plan.length !== 1 ? 'S' : ''}
+                    </span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* ========== MISSION PLAN (Manual) ========== */}
         <section style={styles.section}>
           <div style={styles.sectionHeaderBar}>
             <div style={styles.sectionHeaderDecorLeft} />
-            <span style={styles.sectionLabel}>MISSION PLAN</span>
+            <span style={styles.sectionLabel}>{orchestration ? 'MANUAL TASKS' : 'MISSION PLAN'}</span>
             <div style={styles.sectionHeaderDecorRight} />
           </div>
 
           <div style={styles.taskListPanel}>
-            {tasks.length === 0 && (
+            {tasks.length === 0 && !orchestration && (
               <div style={styles.emptyState}>
                 <span style={styles.emptyStateIcon}>{'\u25C7'}</span>
                 <span style={styles.emptyStateText}>
-                  No tasks defined. Add tasks below to plan your mission.
+                  No tasks defined. Add tasks below or use INITIATE MISSION for autonomous orchestration.
+                </span>
+              </div>
+            )}
+            {tasks.length === 0 && orchestration && (
+              <div style={styles.emptyState}>
+                <span style={styles.emptyStateIcon}>{'\u25C7'}</span>
+                <span style={styles.emptyStateText}>
+                  Orchestration is managing tasks automatically. Manual tasks are optional.
                 </span>
               </div>
             )}
@@ -503,34 +732,68 @@ export default function MissionPlanning({ sendMessage, onWarp }: MissionPlanning
           </div>
         </section>
 
-        {/* ========== BEGIN MISSION BUTTON ========== */}
+        {/* ========== LAUNCH AREA ========== */}
         <div style={styles.missionLaunchArea}>
           <div style={styles.missionLaunchDecorLine} />
-          <button
-            onClick={handleBeginMission}
-            onMouseEnter={() => setHoveredButton('begin-mission')}
-            onMouseLeave={() => setHoveredButton(null)}
-            disabled={unlaunchedCount === 0}
-            style={{
-              ...styles.beginMissionButton,
-              opacity: unlaunchedCount === 0 ? 0.35 : 1,
-              cursor: unlaunchedCount === 0 ? 'not-allowed' : 'pointer',
-              boxShadow: hoveredButton === 'begin-mission' && unlaunchedCount > 0
-                ? '0 0 25px rgba(0, 200, 255, 0.6), 0 0 50px rgba(0, 200, 255, 0.2), inset 0 0 20px rgba(0, 200, 255, 0.1)'
-                : '0 0 15px rgba(0, 200, 255, 0.3), inset 0 0 10px rgba(0, 200, 255, 0.05)',
-              transform: hoveredButton === 'begin-mission' && unlaunchedCount > 0
-                ? 'scale(1.02)'
-                : 'scale(1)',
-            }}
-          >
-            <span style={styles.beginMissionIcon}>{'\u25B6'}</span>
-            <span style={styles.beginMissionLabel}>BEGIN MISSION</span>
-            {unlaunchedCount > 0 && (
+
+          {/* INITIATE MISSION — Autonomous orchestration */}
+          {!isOrchestrating && (
+            <button
+              onClick={handleInitiateMission}
+              onMouseEnter={() => setHoveredButton('initiate-mission')}
+              onMouseLeave={() => setHoveredButton(null)}
+              disabled={!activeProject}
+              style={{
+                ...styles.beginMissionButton,
+                opacity: activeProject ? 1 : 0.35,
+                cursor: activeProject ? 'pointer' : 'not-allowed',
+                boxShadow: hoveredButton === 'initiate-mission' && activeProject
+                  ? '0 0 25px rgba(139, 92, 246, 0.6), 0 0 50px rgba(139, 92, 246, 0.2), inset 0 0 20px rgba(139, 92, 246, 0.1)'
+                  : '0 0 15px rgba(139, 92, 246, 0.3), inset 0 0 10px rgba(139, 92, 246, 0.05)',
+                borderColor: '#8b5cf6',
+                color: '#8b5cf6',
+                textShadow: '0 0 12px rgba(139, 92, 246, 0.5)',
+                transform: hoveredButton === 'initiate-mission' && activeProject
+                  ? 'scale(1.02)'
+                  : 'scale(1)',
+              }}
+            >
+              <span style={styles.beginMissionIcon}>{'\u2726'}</span>
+              <span style={styles.beginMissionLabel}>INITIATE MISSION</span>
+              <span style={{
+                ...styles.beginMissionCount,
+                background: 'rgba(139, 92, 246, 0.15)',
+                border: '1px solid rgba(139, 92, 246, 0.3)',
+              }}>
+                AUTO
+              </span>
+            </button>
+          )}
+
+          {/* BEGIN MISSION — Manual task launch */}
+          {!isOrchestrating && unlaunchedCount > 0 && (
+            <button
+              onClick={handleBeginMission}
+              onMouseEnter={() => setHoveredButton('begin-mission')}
+              onMouseLeave={() => setHoveredButton(null)}
+              style={{
+                ...styles.beginMissionButton,
+                boxShadow: hoveredButton === 'begin-mission'
+                  ? '0 0 25px rgba(0, 200, 255, 0.6), 0 0 50px rgba(0, 200, 255, 0.2), inset 0 0 20px rgba(0, 200, 255, 0.1)'
+                  : '0 0 15px rgba(0, 200, 255, 0.3), inset 0 0 10px rgba(0, 200, 255, 0.05)',
+                transform: hoveredButton === 'begin-mission'
+                  ? 'scale(1.02)'
+                  : 'scale(1)',
+              }}
+            >
+              <span style={styles.beginMissionIcon}>{'\u25B6'}</span>
+              <span style={styles.beginMissionLabel}>BEGIN MISSION</span>
               <span style={styles.beginMissionCount}>
                 {unlaunchedCount} TASK{unlaunchedCount !== 1 ? 'S' : ''}
               </span>
-            )}
-          </button>
+            </button>
+          )}
+
           <div style={styles.missionLaunchDecorLine} />
         </div>
       </div>
@@ -1065,5 +1328,185 @@ const styles: Record<string, React.CSSProperties> = {
     border: '1px solid rgba(0, 200, 255, 0.3)',
     borderRadius: 2,
     color: 'var(--text-primary, #e0f0ff)',
+  },
+
+  /* --- Orchestration Status Panel --- */
+  orchStatusPanel: {
+    background: 'var(--panel-bg, rgba(13, 19, 33, 0.85))',
+    border: '1px solid rgba(139, 92, 246, 0.3)',
+    borderRadius: 2,
+    padding: '16px 20px',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 16,
+    backdropFilter: 'blur(8px)',
+    boxShadow: '0 0 20px rgba(0, 0, 0, 0.3), inset 0 0 30px rgba(139, 92, 246, 0.02)',
+  },
+
+  orchPhaseRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+  },
+
+  orchPhaseLabel: {
+    fontFamily: "var(--font-display, 'Orbitron', sans-serif)",
+    fontSize: '8px',
+    fontWeight: 700,
+    letterSpacing: '2px',
+    color: 'var(--text-secondary, #7a8ba8)',
+    opacity: 0.7,
+  },
+
+  orchPhaseBadge: {
+    fontFamily: "var(--font-display, 'Orbitron', sans-serif)",
+    fontSize: '10px',
+    fontWeight: 700,
+    letterSpacing: '2px',
+    padding: '4px 12px',
+    border: '1px solid',
+    borderRadius: 2,
+    flex: 1,
+  },
+
+  orchAbortButton: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 28,
+    padding: '0 16px',
+    border: '1px solid rgba(255, 51, 68, 0.4)',
+    borderRadius: 1,
+    color: '#ff3344',
+    fontFamily: "var(--font-display, 'Orbitron', sans-serif)",
+    fontSize: '8px',
+    fontWeight: 700,
+    letterSpacing: '2px',
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
+    flexShrink: 0,
+  },
+
+  orchProgressContainer: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+  },
+
+  orchProgressTrack: {
+    flex: 1,
+    height: 4,
+    background: 'rgba(0, 200, 255, 0.1)',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+
+  orchProgressFill: {
+    height: '100%',
+    background: 'linear-gradient(90deg, #00c8ff, #00ff88)',
+    borderRadius: 2,
+    transition: 'width 0.5s ease',
+    boxShadow: '0 0 8px rgba(0, 200, 255, 0.4)',
+  },
+
+  orchProgressText: {
+    fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+    fontSize: '10px',
+    fontWeight: 600,
+    letterSpacing: '1px',
+    color: 'var(--text-secondary, #7a8ba8)',
+    flexShrink: 0,
+  },
+
+  orchPlanList: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    border: '1px solid rgba(0, 200, 255, 0.15)',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+
+  orchPlanTask: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    padding: '10px 16px',
+    borderBottom: '1px solid rgba(0, 200, 255, 0.06)',
+    transition: 'background 0.15s ease',
+  },
+
+  orchTaskStatus: {
+    fontSize: '14px',
+    fontWeight: 700,
+    width: 18,
+    textAlign: 'center' as const,
+    flexShrink: 0,
+  },
+
+  orchTaskInfo: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 2,
+    minWidth: 0,
+  },
+
+  orchTaskTitle: {
+    fontFamily: "var(--font-body, 'Rajdhani', sans-serif)",
+    fontSize: '14px',
+    fontWeight: 600,
+    color: 'var(--text-primary, #e0f0ff)',
+    letterSpacing: '0.3px',
+  },
+
+  orchTaskDesc: {
+    fontFamily: "var(--font-body, 'Rajdhani', sans-serif)",
+    fontSize: '12px',
+    fontWeight: 400,
+    color: 'var(--text-secondary, #7a8ba8)',
+    opacity: 0.7,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+  },
+
+  orchBranchBadge: {
+    fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+    fontSize: '9px',
+    fontWeight: 500,
+    letterSpacing: '0.5px',
+    color: '#8b5cf6',
+    padding: '2px 6px',
+    background: 'rgba(139, 92, 246, 0.08)',
+    border: '1px solid rgba(139, 92, 246, 0.25)',
+    borderRadius: 2,
+    flexShrink: 0,
+  },
+
+  orchApprovalRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 12,
+    paddingTop: 8,
+    borderTop: '1px solid rgba(0, 200, 255, 0.1)',
+  },
+
+  cancelButton: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 38,
+    padding: '0 22px',
+    border: '1px solid rgba(122, 139, 168, 0.3)',
+    borderRadius: 1,
+    color: 'var(--text-secondary, #7a8ba8)',
+    fontFamily: "var(--font-display, 'Orbitron', sans-serif)",
+    fontSize: '10px',
+    fontWeight: 700,
+    letterSpacing: '2px',
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
+    background: 'transparent',
   },
 };

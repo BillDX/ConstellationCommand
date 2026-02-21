@@ -4,6 +4,7 @@ import { useAgentStore } from '../stores/agentStore';
 import { useProjectStore } from '../stores/projectStore';
 import { useLogStore } from '../stores/logStore';
 import { useFlowStore } from '../stores/flowStore';
+import { useOrchestrationStore } from '../stores/orchestrationStore';
 
 type ConnectionStatus = 'connecting' | 'connected' | 'disconnected';
 type TerminalOutputCallback = (agentId: string, data: string) => void;
@@ -28,6 +29,7 @@ export function useWebSocket(token: string | null) {
   const { addProject, updateProject, setBaseDir } = useProjectStore.getState();
   const { addLog } = useLogStore.getState();
   const { addToast } = useFlowStore.getState();
+  const orchStore = useOrchestrationStore.getState();
 
   const sendMessage = useCallback((message: WSClientMessage) => {
     const ws = wsRef.current;
@@ -52,6 +54,15 @@ export function useWebSocket(token: string | null) {
           break;
         case 'state:request':
           wrapped = message; // No payload needed
+          break;
+        case 'orchestration:start':
+          wrapped = { type: 'orchestration:start', payload: { projectId: message.projectId, ...(message.maxConcurrentWorkers !== undefined && { maxConcurrentWorkers: message.maxConcurrentWorkers }) } };
+          break;
+        case 'orchestration:approve-plan':
+          wrapped = { type: 'orchestration:approve-plan', payload: { projectId: message.projectId } };
+          break;
+        case 'orchestration:abort':
+          wrapped = { type: 'orchestration:abort', payload: { projectId: message.projectId } };
           break;
         default:
           wrapped = message;
@@ -176,12 +187,31 @@ export function useWebSocket(token: string | null) {
             projectId: a.projectId,
             task: a.task,
             cwd: a.cwd,
+            role: a.role || 'manual',
             status: mapStatus(a.status),
             launchedAt: a.launchedAt,
             completedAt: a.completedAt,
             filesChanged: a.filesChanged ?? 0,
             events: a.events || [],
+            ...(a.planTaskId && { planTaskId: a.planTaskId }),
+            ...(a.branch && { branch: a.branch }),
           });
+        }
+
+        // Sync orchestration state from projects
+        for (const proj of Object.values(serverProjects)) {
+          const p = proj as any;
+          if (p.orchestration) {
+            const orch = p.orchestration;
+            const orchState = useOrchestrationStore.getState();
+            if (!orchState.orchestrations[p.id]) {
+              orchState.startOrchestration(p.id);
+            }
+            orchState.setPhase(p.id, orch.phase);
+            if (orch.plan?.length > 0) {
+              orchState.setPlan(p.id, orch.plan);
+            }
+          }
         }
         break;
       }
@@ -198,6 +228,75 @@ export function useWebSocket(token: string | null) {
           message: data.message,
           duration: 6000,
         });
+        break;
+      }
+
+      // ── Orchestration messages ────────────────────────────────
+      case 'orchestration:phase': {
+        const orchActions = useOrchestrationStore.getState();
+        if (!orchActions.orchestrations[data.projectId]) {
+          orchActions.startOrchestration(data.projectId);
+        }
+        orchActions.setPhase(data.projectId, data.phase);
+
+        // Show toasts for key phase transitions
+        if (data.phase === 'reviewing') {
+          addToast({
+            type: 'info',
+            title: 'PLAN READY',
+            message: 'Coordinator has produced a mission plan. Review and approve to begin execution.',
+            duration: 8000,
+          });
+        } else if (data.phase === 'executing') {
+          addToast({
+            type: 'success',
+            title: 'MISSION ACTIVE',
+            message: 'Workers are being deployed. Orchestration is in progress.',
+            duration: 5000,
+          });
+        } else if (data.phase === 'completed') {
+          addToast({
+            type: 'success',
+            title: 'MISSION COMPLETE',
+            message: 'All tasks have been completed successfully.',
+            duration: 10000,
+          });
+        } else if (data.phase === 'error') {
+          addToast({
+            type: 'error',
+            title: 'ORCHESTRATION ERROR',
+            message: 'Orchestration encountered an error.',
+            duration: 8000,
+          });
+        }
+        break;
+      }
+
+      case 'orchestration:plan-ready': {
+        const orchActions = useOrchestrationStore.getState();
+        orchActions.setPlan(data.projectId, data.tasks);
+        break;
+      }
+
+      case 'orchestration:task-update': {
+        const orchActions = useOrchestrationStore.getState();
+        orchActions.updateTask(data.projectId, data.taskId, {
+          status: data.status,
+          assignedAgent: data.assignedAgent,
+          branch: data.branch,
+        });
+        break;
+      }
+
+      case 'orchestration:worker-spawned': {
+        const orchActions = useOrchestrationStore.getState();
+        orchActions.addWorker(data.projectId, data.agentId);
+        break;
+      }
+
+      case 'orchestration:merge-result': {
+        const orchActions = useOrchestrationStore.getState();
+        orchActions.setMergeResult(data.projectId, data.taskId, data.success, data.message);
         break;
       }
     }
